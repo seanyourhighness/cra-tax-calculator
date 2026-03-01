@@ -468,6 +468,50 @@ function calculateAllProvinces(productTypeKey, quantity, thcMg, lpCost, retailMa
   return results.sort((a, b) => a.consumerPrice - b.consumerPrice);
 }
 
+/**
+ * Calculates cost & margin analysis across all provinces.
+ * Assumes COGS = costMarginPct × LP Cost (default 50%).
+ * Excise is paid upfront (out of pocket).
+ * Shows: COGS, excise, total out-of-pocket, LP revenue, net profit, true margin.
+ */
+function calculateMarginAnalysis(productTypeKey, quantity, thcMg, lpCost, retailMarkupPct, costMarginPct = 0.50) {
+  const results = [];
+  const cogs = lpCost * costMarginPct; // Cost of goods sold
+
+  for (const provKey of Object.keys(PROVINCES)) {
+    const r = calculate(productTypeKey, provKey, quantity, thcMg, lpCost, retailMarkupPct);
+    if (!r) continue;
+
+    const excise = r.totalExciseDuty;
+    const totalOutOfPocket = cogs + excise;       // Total cash you spend to get product to distributor
+    const landedAtDistributor = lpCost + excise;   // Value of product at distributor
+    const lpRevenue = lpCost;                      // What the LP gets paid
+    const netProfit = lpRevenue - totalOutOfPocket; // Real profit after COGS + excise
+    const trueMarginPct = lpRevenue > 0 ? netProfit / lpRevenue : 0;
+    const exciseAsPercentOfLP = lpRevenue > 0 ? excise / lpRevenue : 0;
+    const roiPct = totalOutOfPocket > 0 ? netProfit / totalOutOfPocket : 0; // Return on investment
+
+    results.push({
+      province: r.province,
+      provinceKey: provKey,
+      cogs,
+      lpRevenue,
+      excise,
+      totalOutOfPocket,
+      landedAtDistributor,
+      netProfit,
+      trueMarginPct,
+      exciseAsPercentOfLP,
+      roiPct,
+      wholesalePrice: r.wholesalePrice + r.mbSRFAmount,
+      consumerPrice: r.consumerPrice
+    });
+  }
+
+  // Sort by net profit descending (best provinces first)
+  return results.sort((a, b) => b.netProfit - a.netProfit);
+}
+
 // ============================================================
 // UI Controller
 // ============================================================
@@ -517,11 +561,13 @@ document.addEventListener("DOMContentLoaded", () => {
     retailValueLabel.textContent = retailSlider.value + "%";
   });
 
-  // DOM Elements for Matrix
+  // DOM Elements for Matrix & Margin
   const matrixPanel = document.getElementById("matrixPanel");
   const matrixTableBody = document.querySelector("#matrixTable tbody");
   const reverseBtn = document.getElementById("reverseBtn");
   const matrixBtn = document.getElementById("matrixBtn");
+  const marginBtn = document.getElementById("marginBtn");
+  const marginPanel = document.getElementById("marginPanel");
 
   // Helper to extract inputs
   function getInputs() {
@@ -548,6 +594,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (i.lp <= 0) { showError("Enter your LP production cost."); return; }
 
     matrixPanel.style.display = "none"; // Hide matrix if open
+    marginPanel.style.display = "none"; // Hide margin if open
 
     const r = calculate(i.productKey, i.provinceKey, i.qty, i.thc, i.lp, i.retMk);
     if (!r) return;
@@ -561,6 +608,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (i.lp <= 0) { showError("Enter your TARGET Retail Shelf Price in the LP Cost field."); return; }
 
     matrixPanel.style.display = "none";
+    marginPanel.style.display = "none";
 
     const targetRetail = i.lp;
     const requiredLPCost = solveForSellingPrice(targetRetail, i.productKey, i.provinceKey, i.qty, i.thc, i.retMk);
@@ -587,9 +635,23 @@ document.addEventListener("DOMContentLoaded", () => {
     if (i.lp <= 0) { showError("Enter your LP production cost to compare."); return; }
 
     resultsPanel.classList.remove("visible"); // Hide pipeline
+    marginPanel.style.display = "none";
 
     const matrixResults = calculateAllProvinces(i.productKey, i.qty, i.thc, i.lp, i.retMk);
     renderMatrix(matrixResults);
+  });
+
+  // 4. Cost & Margin Analysis
+  marginBtn.addEventListener("click", () => {
+    const i = getInputs();
+    if (!validateBasic(i)) return;
+    if (i.lp <= 0) { showError("Enter your LP production cost to run margin analysis."); return; }
+
+    resultsPanel.classList.remove("visible"); // Hide pipeline
+    matrixPanel.style.display = "none";
+
+    const marginResults = calculateMarginAnalysis(i.productKey, i.qty, i.thc, i.lp, i.retMk);
+    renderMarginAnalysis(marginResults, i.lp, PRODUCT_TYPES[i.productKey]);
   });
 
   function showError(msg) {
@@ -708,6 +770,11 @@ document.addEventListener("DOMContentLoaded", () => {
     html += `</div>`; // close pipeline
 
     // ── Summary Cards ──
+    const cogs = r.lpCost * 0.50;
+    const totalOOP = cogs + r.totalExciseDuty;
+    const netProfit = r.lpCost - totalOOP;
+    const trueMargin = r.lpCost > 0 ? netProfit / r.lpCost : 0;
+
     html += `
       <div class="summary-grid">
         <div class="summary-card">
@@ -726,6 +793,35 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="sc-label">LP Gets</div>
           <div class="sc-value">${fmt(r.lpCost)}</div>
           <div class="sc-sub">${r.consumerPrice > 0 ? pct(r.lpCost / r.consumerPrice) + " of shelf price" : ""}</div>
+        </div>
+      </div>
+    `;
+
+    // ── LP Margin Cards ──
+    html += `
+      <div class="margin-summary">
+        <h3>💰 Your Margin Breakdown <span class="margin-assumption">(assuming 50% COGS)</span></h3>
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="sc-label">COGS (50%)</div>
+            <div class="sc-value">${fmt(cogs)}</div>
+            <div class="sc-sub">Production cost</div>
+          </div>
+          <div class="summary-card">
+            <div class="sc-label">Out-of-Pocket</div>
+            <div class="sc-value">${fmt(totalOOP)}</div>
+            <div class="sc-sub">COGS + Excise upfront</div>
+          </div>
+          <div class="summary-card ${netProfit >= 0 ? 'profit-positive' : 'profit-negative'}">
+            <div class="sc-label">Net Profit</div>
+            <div class="sc-value">${fmt(netProfit)}</div>
+            <div class="sc-sub">Revenue − Out-of-Pocket</div>
+          </div>
+          <div class="summary-card ${trueMargin >= 0.20 ? 'profit-positive' : trueMargin >= 0 ? 'profit-warning' : 'profit-negative'}">
+            <div class="sc-label">True Margin</div>
+            <div class="sc-value">${pct(trueMargin)}</div>
+            <div class="sc-sub">After excise impact</div>
+          </div>
         </div>
       </div>
     `;
@@ -775,5 +871,93 @@ document.addEventListener("DOMContentLoaded", () => {
 
     matrixPanel.style.display = "block";
     matrixPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ── Render Margin Analysis ──
+  function renderMarginAnalysis(results, lpCost, product) {
+    const cogs = lpCost * 0.50;
+
+    // Find best/worst for highlighting
+    const bestProfit = Math.max(...results.map(r => r.netProfit));
+    const worstProfit = Math.min(...results.map(r => r.netProfit));
+
+    let html = `
+      <h2>💰 Cost & Margin Analysis</h2>
+      <p class="margin-intro">
+        Real profitability across all provinces. COGS assumed at <strong>50%</strong> of LP Cost
+        (<strong>${fmt(cogs)}</strong>). Excise is paid <strong>upfront</strong> before product reaches distributor.
+      </p>
+
+      <div class="margin-kpi-strip">
+        <div class="kpi">
+          <span class="kpi-label">LP Revenue</span>
+          <span class="kpi-value">${fmt(lpCost)}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">COGS (50%)</span>
+          <span class="kpi-value">${fmt(cogs)}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Pre-Excise Margin</span>
+          <span class="kpi-value kpi-good">50.0%</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Best Province Margin</span>
+          <span class="kpi-value ${bestProfit >= 0 ? 'kpi-good' : 'kpi-bad'}">${pct(results[0].trueMarginPct)}</span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table margin-table">
+          <thead>
+            <tr>
+              <th>Province</th>
+              <th>Excise Duty</th>
+              <th>Total Out-of-Pocket</th>
+              <th>Landed @ Distributor</th>
+              <th>Net Profit</th>
+              <th>True Margin</th>
+              <th>Excise % of Revenue</th>
+              <th>Shelf Price</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    results.forEach(r => {
+      const prov = PROVINCES[r.provinceKey];
+      const profitClass = r.netProfit >= cogs * 0.4 ? 'profit-good' : r.netProfit >= 0 ? 'profit-ok' : 'profit-bad';
+      const marginClass = r.trueMarginPct >= 0.20 ? 'margin-good' : r.trueMarginPct >= 0 ? 'margin-ok' : 'margin-bad';
+      const isBest = r.netProfit === bestProfit ? ' row-best' : '';
+      const isWorst = r.netProfit === worstProfit ? ' row-worst' : '';
+
+      html += `
+        <tr class="${isBest}${isWorst}">
+          <td>${prov.flag} ${r.province}</td>
+          <td>${fmt(r.excise)}</td>
+          <td>${fmt(r.totalOutOfPocket)}</td>
+          <td>${fmt(r.landedAtDistributor)}</td>
+          <td class="${profitClass}">${fmt(r.netProfit)}</td>
+          <td class="${marginClass}">${pct(r.trueMarginPct)}</td>
+          <td>${pct(r.exciseAsPercentOfLP)}</td>
+          <td class="val-highlight">${fmt(r.consumerPrice)}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+
+      <div class="margin-footnote">
+        <p>📊 Sorted by net profit (highest first). Out-of-pocket = COGS + Excise (paid upfront before distributor payment).</p>
+        <p>True Margin = (LP Revenue − Out-of-Pocket) ÷ LP Revenue. Pre-excise margin is 50% by assumption.</p>
+      </div>
+    `;
+
+    marginPanel.innerHTML = html;
+    marginPanel.style.display = "block";
+    marginPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 });
