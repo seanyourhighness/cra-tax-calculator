@@ -1,0 +1,23 @@
+# Reference / source data files (large, not needed for deploy)
+E-14.1.pdf
+E-14.1.xml
+FullText.html
+OCS-Pricing-Calculator-January2026.xlsx
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (in case dependencies are added later)
+node_modules/
+package-lock.json
+
+# Misc
+*.log

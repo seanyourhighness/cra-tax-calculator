@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cannabis Pricing Calculator | CRA Excise + Retail Pipeline | Canada</title>
+  <meta name="description"
+    content="End-to-end cannabis pricing calculator for Canada. Compute CRA excise duties, landed costs, wholesale markups, retail pricing, and consumer shelf price across all provinces.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍁</text></svg>">
+</head>
+
+<body>
+  <div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-badge">
+        <span class="dot"></span>
+        CRA Excise + OCS Retail — 2025/2026
+      </div>
+      <h1>Cannabis Pricing Calculator</h1>
+      <p class="subtitle">End-to-end pipeline: LP production cost → CRA excise duty → landed cost → wholesale markup →
+        retail price → consumer shelf price.</p>
+    </header>
+
+    <!-- Input Panel -->
+    <section class="input-panel">
+      <h2>📋 Product &amp; Pricing Inputs</h2>
+      <div class="form-grid">
+
+        <div class="form-group full-width">
+          <label for="productType">Product Type</label>
+          <select id="productType">
+            <option value="" disabled selected>Select a product type…</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="province">Province / Territory</label>
+          <select id="province">
+            <option value="" disabled selected>Select province…</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label id="quantityLabel" for="quantity">Net Content (grams)</label>
+          <input type="number" id="quantity" placeholder="e.g. 3.5" min="0" step="any">
+        </div>
+
+        <div class="form-group" id="thcGroup">
+          <label for="thcMg">Total THC (mg)</label>
+          <input type="number" id="thcMg" placeholder="e.g. 100" min="0" step="any">
+        </div>
+
+        <div class="form-group">
+          <label for="lpCost">LP Production Cost / Target (CAD)</label>
+          <input type="number" id="lpCost" placeholder="e.g. 25.00" min="0" step="0.01">
+          <span class="field-hint">Your selling price (excl. excise) OR target if using Reverse Solver</span>
+        </div>
+
+        <div class="form-group full-width slider-group">
+          <label for="retailMarkup">
+            Retail Markup: <strong id="retailMarkupValue">39%</strong>
+          </label>
+          <input type="range" id="retailMarkup" min="0" max="100" value="39" step="1">
+          <div class="slider-labels">
+            <span>0%</span>
+            <span class="preset" data-val="30">Private 30%</span>
+            <span class="preset" data-val="39">OCS 39%</span>
+            <span class="preset" data-val="50">Premium 50%</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <div class="form-group full-width action-buttons">
+          <button class="calculate-btn primary-btn" id="calculateBtn">
+            Calculate Forward Pipeline ➡️
+          </button>
+          <button class="calculate-btn secondary-btn" id="reverseBtn"
+            title="Find required LP Cost to hit a exact Retail Target Shelf Price">
+            Reverse Solver (Target Price) 🎯
+          </button>
+          <button class="calculate-btn tertiary-btn" id="matrixBtn"
+            title="Compare calculation across all 13 tracking provinces at once">
+            All-Province Matrix 🇨🇦
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Results Panel -->
+    <section id="resultsPanel" class="results-container"></section>
+
+    <!-- Matrix Modal/Panel -->
+    <section id="matrixPanel" class="matrix-container" style="display: none;">
+      <h2>🇨🇦 Multi-Province Comparison Matrix</h2>
+      <div class="table-responsive">
+        <table id="matrixTable" class="data-table">
+          <thead>
+            <tr>
+              <th>Province</th>
+              <th>Excise Duty</th>
+              <th>Landed Cost</th>
+              <th>Wholesale</th>
+              <th>Taxes</th>
+              <th>Retail (Shelf)</th>
+              <th>Gov. Take %</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Excise rates from <a href="https://www.canada.ca/en/revenue-agency.html" target="_blank" rel="noopener">Canada
+          Revenue Agency</a> • Wholesale data from OCS Pricing Calculator (Jan 2026)</p>
+      <p>For estimation purposes only. Consult the CRA for official filings.</p>
+    </footer>
+
+  </div>
+
+  <script src="calculator.js"></script>
+  <script>
+    // Preset slider clicks
+    document.querySelectorAll('.preset').forEach(el => {
+      el.addEventListener('click', () => {
+        const slider = document.getElementById('retailMarkup');
+        slider.value = el.dataset.val;
+        slider.dispatchEvent(new Event('input'));
+      });
+    });
+  </script>
+</body>
+
+</html>
