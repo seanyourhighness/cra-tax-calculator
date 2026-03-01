@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍁</text></svg>">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
 
 <body>
@@ -95,6 +96,10 @@
             title="Find LP prices per province that achieve a uniform shelf price">
             Price Equalizer ⚖️
           </button>
+          <button class="calculate-btn scenario-btn" id="scenarioBtn"
+            title="Compare two pricing scenarios side by side">
+            Scenario Simulator 🔮
+          </button>
         </div>
 
       </div>
@@ -130,6 +135,14 @@
 
     <!-- Balanced Margin Panel -->
     <section id="balancedPanel" class="margin-container" style="display: none;"></section>
+
+    <!-- Scenario Simulator Panel -->
+    <section id="scenarioPanel" class="margin-container" style="display: none;"></section>
+
+    <!-- Floating Export Button -->
+    <button id="exportPdfBtn" class="export-btn" style="display: none;" title="Export current view to PDF">
+      📊 Export PDF
+    </button>
 
     <!-- Footer -->
     <footer class="app-footer">
