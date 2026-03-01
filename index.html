@@ -91,6 +91,10 @@
             title="Compare calculation across all 13 tracking provinces at once">
             All-Province Matrix 🇨🇦
           </button>
+          <button class="calculate-btn balanced-btn" id="balancedBtn"
+            title="Find LP prices per province that achieve a uniform shelf price">
+            Price Equalizer ⚖️
+          </button>
         </div>
 
       </div>
@@ -107,12 +111,13 @@
           <thead>
             <tr>
               <th>Province</th>
-              <th>Excise Duty</th>
-              <th>Landed Cost</th>
+              <th>Excise</th>
+              <th>Landed</th>
+              <th>Margin</th>
               <th>Wholesale</th>
               <th>Taxes</th>
-              <th>Retail (Shelf)</th>
-              <th>Gov. Take %</th>
+              <th>Shelf Price</th>
+              <th>Gov. %</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -122,6 +127,9 @@
 
     <!-- Margin Analysis Panel -->
     <section id="marginPanel" class="margin-container" style="display: none;"></section>
+
+    <!-- Balanced Margin Panel -->
+    <section id="balancedPanel" class="margin-container" style="display: none;"></section>
 
     <!-- Footer -->
     <footer class="app-footer">

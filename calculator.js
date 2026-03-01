@@ -512,6 +512,69 @@ function calculateMarginAnalysis(productTypeKey, quantity, thcMg, lpCost, retail
   return results.sort((a, b) => b.netProfit - a.netProfit);
 }
 
+/**
+ * Price Equalizer: find the LP cost per province that achieves a uniform shelf price.
+ * The user's base LP cost is the floor — we never charge less.
+ * For provinces where the target is below their natural shelf price, they keep their natural price.
+ */
+function calculateUniformPricing(baseLPCost, targetShelfPrice, productTypeKey, quantity, thcMg, retailMarkupPct) {
+  const results = [];
+
+  for (const provKey of Object.keys(PROVINCES)) {
+    // Calculate natural result at base LP
+    const natural = calculate(productTypeKey, provKey, quantity, thcMg, baseLPCost, retailMarkupPct);
+    if (!natural) continue;
+
+    const naturalShelf = natural.consumerPrice;
+    let adjustedLP = baseLPCost;
+    let actualShelf = naturalShelf;
+    let matchesTarget = false;
+
+    if (naturalShelf < targetShelfPrice) {
+      // Province is cheaper — increase LP to hit target shelf price
+      const solvedLP = solveForSellingPrice(targetShelfPrice, productTypeKey, provKey, quantity, thcMg, retailMarkupPct);
+      if (solvedLP >= baseLPCost) {
+        adjustedLP = solvedLP;
+        const adjusted = calculate(productTypeKey, provKey, quantity, thcMg, adjustedLP, retailMarkupPct);
+        actualShelf = adjusted ? adjusted.consumerPrice : naturalShelf;
+        matchesTarget = Math.abs(actualShelf - targetShelfPrice) < 0.10;
+      }
+    } else if (Math.abs(naturalShelf - targetShelfPrice) < 0.10) {
+      matchesTarget = true;
+    }
+    // If naturalShelf > targetShelfPrice: province is too expensive, LP stays at base
+
+    const cogs = adjustedLP * 0.50;
+    const adjustedCalc = calculate(productTypeKey, provKey, quantity, thcMg, adjustedLP, retailMarkupPct);
+    const excise = adjustedCalc ? adjustedCalc.totalExciseDuty : 0;
+    const landed = adjustedCalc ? adjustedCalc.landedCost : 0;
+    const wholesale = adjustedCalc ? (adjustedCalc.wholesalePrice + adjustedCalc.mbSRFAmount) : 0;
+    const netProfit = adjustedLP - cogs - excise;
+    const trueMargin = adjustedLP > 0 ? netProfit / adjustedLP : 0;
+    const lpPremium = adjustedLP - baseLPCost;
+
+    results.push({
+      province: natural.province,
+      provinceKey: provKey,
+      baseLPCost,
+      adjustedLP,
+      lpPremium,
+      cogs,
+      excise,
+      landed,
+      wholesale,
+      naturalShelf,
+      actualShelf,
+      netProfit,
+      trueMargin,
+      matchesTarget
+    });
+  }
+
+  // Sort by actual shelf price
+  return results.sort((a, b) => a.actualShelf - b.actualShelf);
+}
+
 // ============================================================
 // UI Controller
 // ============================================================
@@ -561,13 +624,22 @@ document.addEventListener("DOMContentLoaded", () => {
     retailValueLabel.textContent = retailSlider.value + "%";
   });
 
-  // DOM Elements for Matrix & Margin
+  // DOM Elements for Matrix, Margin & Balanced
   const matrixPanel = document.getElementById("matrixPanel");
   const matrixTableBody = document.querySelector("#matrixTable tbody");
   const reverseBtn = document.getElementById("reverseBtn");
   const matrixBtn = document.getElementById("matrixBtn");
   const marginBtn = document.getElementById("marginBtn");
   const marginPanel = document.getElementById("marginPanel");
+  const balancedBtn = document.getElementById("balancedBtn");
+  const balancedPanel = document.getElementById("balancedPanel");
+
+  // Helper to hide all extra panels
+  function hideAllPanels() {
+    matrixPanel.style.display = "none";
+    marginPanel.style.display = "none";
+    balancedPanel.style.display = "none";
+  }
 
   // Helper to extract inputs
   function getInputs() {
@@ -595,6 +667,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     matrixPanel.style.display = "none"; // Hide matrix if open
     marginPanel.style.display = "none"; // Hide margin if open
+    balancedPanel.style.display = "none";
 
     const r = calculate(i.productKey, i.provinceKey, i.qty, i.thc, i.lp, i.retMk);
     if (!r) return;
@@ -609,6 +682,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     matrixPanel.style.display = "none";
     marginPanel.style.display = "none";
+    balancedPanel.style.display = "none";
 
     const targetRetail = i.lp;
     const requiredLPCost = solveForSellingPrice(targetRetail, i.productKey, i.provinceKey, i.qty, i.thc, i.retMk);
@@ -635,7 +709,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (i.lp <= 0) { showError("Enter your LP production cost to compare."); return; }
 
     resultsPanel.classList.remove("visible"); // Hide pipeline
-    marginPanel.style.display = "none";
+    hideAllPanels();
+    matrixPanel.style.display = "block"; // Re-show matrix
 
     const matrixResults = calculateAllProvinces(i.productKey, i.qty, i.thc, i.lp, i.retMk);
     renderMatrix(matrixResults);
@@ -647,11 +722,34 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!validateBasic(i)) return;
     if (i.lp <= 0) { showError("Enter your LP production cost to run margin analysis."); return; }
 
-    resultsPanel.classList.remove("visible"); // Hide pipeline
-    matrixPanel.style.display = "none";
+    resultsPanel.classList.remove("visible");
+    hideAllPanels();
 
     const marginResults = calculateMarginAnalysis(i.productKey, i.qty, i.thc, i.lp, i.retMk);
     renderMarginAnalysis(marginResults, i.lp, PRODUCT_TYPES[i.productKey]);
+  });
+
+  // 5. Price Equalizer (Uniform Shelf Pricing)
+  let lastEqualizerInputs = null;
+  balancedBtn.addEventListener("click", () => {
+    const i = getInputs();
+    if (!validateBasic(i)) return;
+    if (i.lp <= 0) { showError("Enter your base LP production cost."); return; }
+
+    resultsPanel.classList.remove("visible");
+    hideAllPanels();
+
+    lastEqualizerInputs = i;
+
+    // Calculate all provinces at base LP to find the natural shelf price range
+    const allNatural = calculateAllProvinces(i.productKey, i.qty, i.thc, i.lp, i.retMk);
+    const maxShelf = Math.max(...allNatural.map(r => r.consumerPrice));
+
+    // Default target = highest natural shelf price (achievable for all)
+    const targetShelf = maxShelf;
+    const results = calculateUniformPricing(i.lp, targetShelf, i.productKey, i.qty, i.thc, i.retMk);
+    const naturalMin = Math.min(...allNatural.map(r => r.consumerPrice));
+    renderPriceEqualizer(results, targetShelf, i.lp, naturalMin, maxShelf, PRODUCT_TYPES[i.productKey]);
   });
 
   function showError(msg) {
@@ -857,10 +955,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const provName = PROVINCES[Object.keys(PROVINCES).find(k => PROVINCES[k].name === r.province)].flag + " " + r.province;
 
+      // Margin calculation (50% COGS assumption)
+      const cogs = r.lpCost * 0.50;
+      const excise = r.totalExciseDuty;
+      const netProfit = r.lpCost - cogs - excise;
+      const trueMargin = r.lpCost > 0 ? netProfit / r.lpCost : 0;
+      const marginClass = trueMargin >= 0.20 ? 'margin-good' : trueMargin >= 0 ? 'margin-ok' : 'margin-bad';
+
       tr.innerHTML = `
         <td>${provName}</td>
         <td>${fmt(r.totalExciseDuty)}</td>
         <td>${fmt(r.landedCost)}</td>
+        <td class="${marginClass}">${pct(trueMargin)}</td>
         <td>${fmt(r.wholesalePrice + r.mbSRFAmount)}</td>
         <td>${fmt(r.salesTaxAmount)}</td>
         <td class="val-highlight">${fmt(r.consumerPrice)}</td>
@@ -959,5 +1065,137 @@ document.addEventListener("DOMContentLoaded", () => {
     marginPanel.innerHTML = html;
     marginPanel.style.display = "block";
     marginPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ── Render Balanced Margin ──
+  function renderPriceEqualizer(results, targetShelf, baseLPCost, naturalMin, naturalMax, product) {
+    const matchCount = results.filter(r => r.matchesTarget).length;
+    const totalCount = results.length;
+    const avgLP = results.reduce((sum, r) => sum + r.adjustedLP, 0) / totalCount;
+    const avgMargin = results.reduce((sum, r) => sum + r.trueMargin, 0) / totalCount;
+    const bestMargin = Math.max(...results.map(r => r.trueMargin));
+    const worstMargin = Math.min(...results.map(r => r.trueMargin));
+
+    let html = `
+      <h2>⚖️ Price Equalizer — Uniform Shelf Pricing</h2>
+      <p class="margin-intro">
+        Adjust each province's LP price to achieve a <strong>uniform consumer shelf price</strong>.
+        Your base LP of <strong>${fmt(baseLPCost)}</strong> is the floor — no province goes below it.
+        COGS assumed at <strong>50%</strong>.
+      </p>
+
+      <div class="balanced-slider-group">
+        <label>
+          Target Shelf Price: <strong id="eqTargetLabel">${fmt(targetShelf)}</strong>
+        </label>
+        <input type="range" id="eqSlider"
+          min="${Math.floor(naturalMin)}" max="${Math.ceil(naturalMax * 1.3)}"
+          value="${targetShelf.toFixed(0)}" step="0.50">
+        <div class="slider-labels">
+          <span>${fmt(Math.floor(naturalMin))}</span>
+          <span class="balanced-preset" data-val="${naturalMin.toFixed(0)}">Natural Min</span>
+          <span class="balanced-preset" data-val="${naturalMax.toFixed(0)}">Natural Max</span>
+          <span>${fmt(Math.ceil(naturalMax * 1.3))}</span>
+        </div>
+      </div>
+
+      <div class="margin-kpi-strip">
+        <div class="kpi">
+          <span class="kpi-label">Target Shelf</span>
+          <span class="kpi-value kpi-good">${fmt(targetShelf)}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Provinces Matched</span>
+          <span class="kpi-value ${matchCount === totalCount ? 'kpi-good' : ''}">${matchCount} / ${totalCount}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Avg LP Price</span>
+          <span class="kpi-value">${fmt(avgLP)}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Margin Range</span>
+          <span class="kpi-value">${pct(worstMargin)} – ${pct(bestMargin)}</span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table margin-table">
+          <thead>
+            <tr>
+              <th>Province</th>
+              <th>LP Price</th>
+              <th>Premium</th>
+              <th>Excise</th>
+              <th>Landed</th>
+              <th>Shelf Price</th>
+              <th>Margin</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    results.forEach(r => {
+      const prov = PROVINCES[r.provinceKey];
+      const marginClass = r.trueMargin >= 0.20 ? 'margin-good' : r.trueMargin >= 0 ? 'margin-ok' : 'margin-bad';
+      const premiumStr = r.lpPremium > 0.01 ? `+${fmt(r.lpPremium)}` : '—';
+      const premiumClass = r.lpPremium > 0.01 ? 'profit-good' : '';
+      const statusBadge = r.matchesTarget
+        ? '<span class="eq-badge eq-match">✓ Matched</span>'
+        : (r.naturalShelf > targetShelf
+          ? '<span class="eq-badge eq-over">▲ Above</span>'
+          : '<span class="eq-badge eq-floor">⬇ Floor</span>');
+
+      html += `
+        <tr>
+          <td>${prov.flag} ${r.province}</td>
+          <td class="val-highlight">${fmt(r.adjustedLP)}</td>
+          <td class="${premiumClass}">${premiumStr}</td>
+          <td>${fmt(r.excise)}</td>
+          <td>${fmt(r.landed)}</td>
+          <td>${fmt(r.actualShelf)}</td>
+          <td class="${marginClass}">${pct(r.trueMargin)}</td>
+          <td>${statusBadge}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+
+      <div class="margin-footnote">
+        <p>⚖️ Cheaper provinces get a higher LP price to match the target shelf price. Your margin improves in those markets.</p>
+        <p>"Above" = province's natural shelf exceeds target (LP stays at base). "Floor" = LP can't go below base.</p>
+      </div>
+    `;
+
+    balancedPanel.innerHTML = html;
+    balancedPanel.style.display = "block";
+    balancedPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    // Wire up interactive slider
+    const slider = document.getElementById("eqSlider");
+    const label = document.getElementById("eqTargetLabel");
+
+    slider.addEventListener("input", () => {
+      const newTarget = parseFloat(slider.value);
+      label.textContent = fmt(newTarget);
+
+      if (lastEqualizerInputs) {
+        const i = lastEqualizerInputs;
+        const newResults = calculateUniformPricing(i.lp, newTarget, i.productKey, i.qty, i.thc, i.retMk);
+        renderPriceEqualizer(newResults, newTarget, baseLPCost, naturalMin, naturalMax, product);
+      }
+    });
+
+    // Wire up presets
+    balancedPanel.querySelectorAll('.balanced-preset').forEach(el => {
+      el.addEventListener('click', () => {
+        slider.value = el.dataset.val;
+        slider.dispatchEvent(new Event('input'));
+      });
+    });
   }
 });

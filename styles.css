@@ -628,10 +628,10 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  padding: 2rem;
+  padding: 1.25rem;
   backdrop-filter: blur(20px);
   box-shadow: var(--shadow-lg);
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   animation: fadeIn 0.4s ease;
 }
 
@@ -665,13 +665,13 @@ input[type="range"]::-webkit-slider-thumb {
   width: 100%;
   border-collapse: collapse;
   text-align: right;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   white-space: nowrap;
 }
 
 .data-table th,
 .data-table td {
-  padding: 0.85rem 1rem;
+  padding: 0.55rem 0.65rem;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -680,8 +680,8 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-secondary);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  font-size: 0.65rem;
 }
 
 .data-table th:first-child,
@@ -702,6 +702,14 @@ input[type="range"]::-webkit-slider-thumb {
 .val-highlight {
   color: var(--accent-emerald);
   font-weight: 700;
+}
+
+.matrix-container h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  text-align: center;
 }
 
 /* ============================================================
@@ -937,4 +945,90 @@ input[type="range"]::-webkit-slider-thumb {
 /* Margin table specific */
 .margin-table th {
   font-size: 0.68rem;
+}
+
+/* ============================================================
+   Balanced Margin Button & Slider
+   ============================================================ */
+
+.balanced-btn {
+  color: white;
+  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  border: none;
+}
+
+.balanced-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(139, 92, 246, 0.3);
+}
+
+.balanced-slider-group {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.balanced-slider-group label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.balanced-slider-group label strong {
+  color: var(--accent-emerald);
+  font-size: 1.1rem;
+}
+
+.balanced-preset {
+  cursor: pointer;
+  color: var(--accent-purple);
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.balanced-preset:hover {
+  color: var(--text-primary);
+}
+
+/* Price Equalizer Status Badges */
+.eq-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.eq-match {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-emerald);
+}
+
+.eq-over {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-amber);
+}
+
+.eq-floor {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted);
+}
+
+/* Retail Tier column coloring */
+.tier-low {
+  color: var(--accent-emerald);
+}
+
+.tier-mid {
+  color: var(--accent-amber);
+}
+
+.tier-high {
+  color: #f87171;
 }
