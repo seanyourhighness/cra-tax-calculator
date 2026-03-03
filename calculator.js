@@ -156,6 +156,8 @@ const PROVINCES = {
     name: "British Columbia", flag: "🌲",
     adjustmentRate: 0, coordinated: true,
     salesTaxRate: 0.12, salesTaxLabel: "GST + PST (5% + 7%)",
+    // BC charges 20% PST on vaping products (devices, cartridges, cannabis e-juice)
+    vapeSalesTaxRate: 0.25, vapeSalesTaxLabel: "GST + PST (5% + 20%)",
     wholesaleMarkup: 0.15,
     wholesaleMarkupLabel: "BCLDB 15% Wholesale Markup"
   },
@@ -286,9 +288,15 @@ function calculate(productTypeKey, provinceKey, quantity, thcMg, lpCost, retailM
 
   // ── Stage 1: CRA Excise Duty ──
 
-  // For "higher_of" products, the dutiable amount is the LP's selling price
-  // to the provincial distributor, which = lpCost (their cost basis / desired sell price)
-  const dutiableAmount = lpCost;
+  // CRA Dutiable Amount formula (Excise Act 2001):
+  //   Dutiable Amount = A × [100% / (100% + B + C)]
+  //   A = LP selling price (total consideration)
+  //   B = federal ad valorem rate (2.5%)
+  //   C = provincial ad valorem rate (7.5%, or 0% for Manitoba)
+  // This isolates the tax-exclusive base from the tax-inclusive selling price.
+  const fedAdVal = product.method === "higher_of" ? product.federalAdValorem : 0;
+  const provAdVal = (product.method === "higher_of" && province.coordinated) ? product.provincialAdValorem : 0;
+  const dutiableAmount = lpCost * (1 / (1 + fedAdVal + provAdVal));
 
   if (product.method === "higher_of") {
     r.federalFlatDuty = product.federalFlat * quantity;
@@ -313,29 +321,37 @@ function calculate(productTypeKey, provinceKey, quantity, thcMg, lpCost, retailM
       r.provincialFlatDuty = product.provincialFlat * quantity;
       r.provincialAdValoremDuty = product.provincialAdValorem * dutiableAmount;
 
-      // CRA: adjustment is ALWAYS applied to the dutiable amount (base amount / selling price),
-      // regardless of whether flat or ad valorem wins the "higher of" test.
-      // Reference: Excise Act 2001 s.158.22, CRA EDN71
-      r.adjustmentAmount = province.adjustmentRate * dutiableAmount;
-
-      // Compare: flat + adj vs ad valorem + adj
-      const flatPlusAdj = r.provincialFlatDuty + r.adjustmentAmount;
-      const adValoremPlusAdj = r.provincialAdValoremDuty + r.adjustmentAmount;
-
+      // CRA adjustment rate: applied to a "base amount" or "dutiable amount" depending
+      // on which method won. Per Excise Act 2001 s.158.22:
+      //   If FLAT wins: base amount = [(A − fedFlat − provFlat)] × [100%/(100%+D)]
+      //   If AD VAL wins: adjustment = adjustmentRate × dutiableAmount
       if (r.provincialAdValoremDuty > r.provincialFlatDuty) {
+        // Ad valorem won — adjustment on dutiable amount
+        r.adjustmentAmount = province.adjustmentRate * dutiableAmount;
         r.provincialBaseDuty = r.provincialAdValoremDuty;
-        r.totalProvincialDuty = adValoremPlusAdj;
+        r.totalProvincialDuty = r.provincialAdValoremDuty + r.adjustmentAmount;
         r.provincialMethod = "Ad Valorem + Adj. (higher)";
       } else {
+        // Flat rate won — adjustment on base amount
+        // Base Amount = (A − fedFlatTotal − provFlatTotal) / (1 + D)
+        const fedFlatTotal = product.federalFlat * quantity;
+        const provFlatTotal = product.provincialFlat * quantity;
+        const baseAmount = (lpCost - fedFlatTotal - provFlatTotal) / (1 + province.adjustmentRate);
+        r.adjustmentAmount = province.adjustmentRate * Math.max(0, baseAmount);
         r.provincialBaseDuty = r.provincialFlatDuty;
-        r.totalProvincialDuty = flatPlusAdj;
+        r.totalProvincialDuty = r.provincialFlatDuty + r.adjustmentAmount;
         r.provincialMethod = "Flat Rate + Adj. (higher)";
       }
     } else {
+      // THC-based products: flat rate only, no ad valorem
       r.provincialBaseDuty = product.provincialPerMgTHC * thcMg;
-      // For THC-based products, adjustment is also on the base amount.
-      // base amount for THC products = the THC duty amount (since there's no selling-price-based calc)
-      r.adjustmentAmount = province.adjustmentRate * dutiableAmount;
+      // For THC products, the CRA adjustment base amount is derived from the
+      // selling price minus the federal and provincial THC duties:
+      //   Base Amount = (A − fedTHCduty − provTHCduty) / (1 + D)
+      const fedTHCduty = product.federalPerMgTHC * thcMg;
+      const provTHCduty = product.provincialPerMgTHC * thcMg;
+      const thcBaseAmount = (lpCost - fedTHCduty - provTHCduty) / (1 + province.adjustmentRate);
+      r.adjustmentAmount = province.adjustmentRate * Math.max(0, thcBaseAmount);
       r.totalProvincialDuty = r.provincialBaseDuty + r.adjustmentAmount;
       r.provincialMethod = "THC Flat Rate" + (province.adjustmentRate > 0 ? " + Adj." : "");
     }
@@ -375,7 +391,13 @@ function calculate(productTypeKey, provinceKey, quantity, thcMg, lpCost, retailM
   r.preTaxRetailPrice = retailBase * (1 + retailMarkupPct);
 
   // ── Stage 5: Sales Tax ──
-  r.salesTaxAmount = r.preTaxRetailPrice * province.salesTaxRate;
+  // BC charges 20% PST (25% combined) on vape products specifically
+  const isVapeProduct = (productTypeKey === 'vapes');
+  if (isVapeProduct && province.vapeSalesTaxRate) {
+    r.salesTaxRate = province.vapeSalesTaxRate;
+    r.salesTaxLabel = province.vapeSalesTaxLabel;
+  }
+  r.salesTaxAmount = r.preTaxRetailPrice * r.salesTaxRate;
   r.consumerPrice = r.preTaxRetailPrice + r.salesTaxAmount;
 
   // Round consumer price to nearest $0.05 (OCS convention)
