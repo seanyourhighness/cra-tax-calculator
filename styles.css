@@ -1042,8 +1042,8 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-primary);
 }
 
-/* Price Equalizer Status Badges */
-.eq-badge {
+/* Margin Protection Badges */
+.mp-badge {
   display: inline-block;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
@@ -1053,19 +1053,164 @@ input[type="range"]::-webkit-slider-thumb {
   white-space: nowrap;
 }
 
-.eq-match {
+.mp-protected {
   background: rgba(16, 185, 129, 0.15);
   color: var(--accent-emerald);
 }
 
-.eq-over {
+.mp-at-risk {
   background: rgba(245, 158, 11, 0.15);
   color: var(--accent-amber);
 }
 
-.eq-floor {
-  background: rgba(148, 163, 184, 0.15);
+.mp-below {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.mp-increase {
+  font-size: 0.65rem;
+  color: var(--accent-amber);
+  margin-left: 4px;
+}
+
+.mp-alert-dot {
+  font-size: 0.7rem;
+  margin-left: 4px;
+  cursor: help;
+}
+
+/* Row highlighting for at-risk/danger */
+.mp-row-warn {
+  background: rgba(245, 158, 11, 0.06) !important;
+}
+
+.mp-row-danger {
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+
+/* Risk Summary Section */
+.mp-risk-summary {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+}
+
+.mp-risk-summary h3 {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.mp-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.mp-risk-card {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.mp-risk-card strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.mp-risk-card p {
+  margin: 0;
   color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.mp-risk-warn {
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 3px solid var(--accent-amber);
+}
+
+.mp-risk-danger {
+  background: rgba(239, 68, 68, 0.08);
+  border-left: 3px solid #f87171;
+}
+
+/* Market Position (Competitor Analysis) Section */
+.mp-competitor-section {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+}
+
+.mp-competitor-section h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.mp-market-bar {
+  display: flex;
+  height: 36px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 0.75rem 0;
+}
+
+.mp-bar-segment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.mp-bar-low {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--accent-emerald);
+}
+
+.mp-bar-mid {
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--accent-amber);
+}
+
+.mp-bar-high {
+  background: rgba(99, 102, 241, 0.2);
+  color: var(--accent-indigo);
+}
+
+.mp-position-label {
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.mp-pos-low {
+  color: var(--accent-emerald);
+  font-weight: 600;
+}
+
+.mp-pos-mid {
+  color: var(--accent-amber);
+  font-weight: 600;
+}
+
+.mp-pos-high {
+  color: var(--accent-indigo);
+  font-weight: 600;
+}
+
+/* KPI ok/bad states */
+.kpi-ok {
+  color: var(--accent-amber);
+}
+
+.kpi-bad {
+  color: #f87171;
 }
 
 /* Retail Tier column coloring */

@@ -536,68 +536,151 @@ function calculateMarginAnalysis(productTypeKey, quantity, thcMg, lpCost, retail
 }
 
 /**
- * Price Equalizer: find the LP cost per province that achieves a uniform shelf price.
- * The user's base LP cost is the floor — we never charge less.
- * For provinces where the target is below their natural shelf price, they keep their natural price.
- * When cogsOverride is provided (a dollar amount), it's used directly.
+ * Margin Protection: find the minimum LP cost per province to guarantee
+ * a target margin (e.g. 40%) after COGS and excise.
+ *
+ * margin = (lpCost - cogs - excise) / lpCost >= targetMargin
+ *
+ * For each province, binary-searches for the minimum LP where the margin equation holds.
+ * baseLPCost is the user's intended LP price — the recommended LP is the higher of
+ * the base and the minimum needed for margin protection.
+ *
+ * Best-practice alerts surfaced from NotebookLM research:
+ *   - Tax Reserve: excise > 30% of LP cost
+ *   - Cash Flow: cash outlay (COGS + excise) > 60% of LP revenue
+ *   - Margin Health: <40% red, 40-55% amber, >55% green
  */
-function calculateUniformPricing(baseLPCost, targetShelfPrice, productTypeKey, quantity, thcMg, retailMarkupPct, cogsOverride = null) {
+function calculateMarginProtection(baseLPCost, targetMargin, productTypeKey, quantity, thcMg, retailMarkupPct, cogsOverride = null) {
   const results = [];
 
   for (const provKey of Object.keys(PROVINCES)) {
-    // Calculate natural result at base LP
-    const natural = calculate(productTypeKey, provKey, quantity, thcMg, baseLPCost, retailMarkupPct);
-    if (!natural) continue;
+    const province = PROVINCES[provKey];
 
-    const naturalShelf = natural.consumerPrice;
-    let adjustedLP = baseLPCost;
-    let actualShelf = naturalShelf;
-    let matchesTarget = false;
+    // Step 1: Find the minimum LP cost to achieve target margin in this province
+    // margin = (lp - cogs - excise(lp)) / lp >= targetMargin
+    // Since excise depends on LP (for ad valorem), we binary search
+    let minLP = 0;
+    const cogs = cogsOverride !== null ? cogsOverride : baseLPCost * 0.50;
 
-    if (naturalShelf < targetShelfPrice) {
-      // Province is cheaper — increase LP to hit target shelf price
-      const solvedLP = solveForSellingPrice(targetShelfPrice, productTypeKey, provKey, quantity, thcMg, retailMarkupPct);
-      if (solvedLP >= baseLPCost) {
-        adjustedLP = solvedLP;
-        const adjusted = calculate(productTypeKey, provKey, quantity, thcMg, adjustedLP, retailMarkupPct);
-        actualShelf = adjusted ? adjusted.consumerPrice : naturalShelf;
-        matchesTarget = Math.abs(actualShelf - targetShelfPrice) < 0.10;
+    // Binary search: find minimum LP where margin >= targetMargin
+    let lo = Math.max(0.01, cogs); // LP must be at least COGS
+    let hi = cogs * 10; // generous upper bound
+    let bestMinLP = hi;
+    const maxIter = 100;
+    const tolerance = 0.001;
+
+    for (let iter = 0; iter < maxIter; iter++) {
+      const mid = (lo + hi) / 2;
+      const sim = calculate(productTypeKey, provKey, quantity, thcMg, mid, retailMarkupPct);
+      if (!sim) break;
+
+      const excise = sim.totalExciseDuty;
+      const cogsForCalc = cogsOverride !== null ? cogsOverride : mid * 0.50;
+      const margin = mid > 0 ? (mid - cogsForCalc - excise) / mid : 0;
+
+      if (margin >= targetMargin - 0.001) {
+        bestMinLP = mid;
+        hi = mid - tolerance;
+      } else {
+        lo = mid + tolerance;
       }
-    } else if (Math.abs(naturalShelf - targetShelfPrice) < 0.10) {
-      matchesTarget = true;
     }
-    // If naturalShelf > targetShelfPrice: province is too expensive, LP stays at base
+    minLP = bestMinLP;
 
-    const cogs = cogsOverride !== null ? cogsOverride : adjustedLP * 0.50;
-    const adjustedCalc = calculate(productTypeKey, provKey, quantity, thcMg, adjustedLP, retailMarkupPct);
-    const excise = adjustedCalc ? adjustedCalc.totalExciseDuty : 0;
-    const landed = adjustedCalc ? adjustedCalc.landedCost : 0;
-    const wholesale = adjustedCalc ? (adjustedCalc.wholesalePrice + adjustedCalc.mbSRFAmount) : 0;
-    const netProfit = adjustedLP - cogs - excise;
-    const trueMargin = adjustedLP > 0 ? netProfit / adjustedLP : 0;
-    const lpPremium = adjustedLP - baseLPCost;
+    // Step 2: Recommended LP = max(user's base LP, minimum for margin)
+    const recommendedLP = Math.max(baseLPCost, minLP);
+    const lpAdjustment = recommendedLP - baseLPCost;
+
+    // Step 3: Calculate full pipeline at recommended LP
+    const calc = calculate(productTypeKey, provKey, quantity, thcMg, recommendedLP, retailMarkupPct);
+    if (!calc) continue;
+
+    const excise = calc.totalExciseDuty;
+    const actualCogs = cogsOverride !== null ? cogsOverride : recommendedLP * 0.50;
+    const netProfit = recommendedLP - actualCogs - excise;
+    const actualMargin = recommendedLP > 0 ? netProfit / recommendedLP : 0;
+    const cashOutlay = actualCogs + excise; // upfront cash needed
+    const excisePctOfLP = recommendedLP > 0 ? excise / recommendedLP : 0;
+    const cashOutlayPct = recommendedLP > 0 ? cashOutlay / recommendedLP : 0;
+    const marginBuffer = actualMargin - targetMargin; // headroom above minimum
+
+    // Step 4: Determine status
+    let marginStatus, statusIcon;
+    if (actualMargin >= targetMargin - 0.005) {
+      marginStatus = "protected";
+      statusIcon = "🛡️";
+    } else if (actualMargin >= targetMargin * 0.75) {
+      marginStatus = "at-risk";
+      statusIcon = "⚠️";
+    } else {
+      marginStatus = "below-floor";
+      statusIcon = "🚨";
+    }
+
+    // If user's base LP is above minimum, they're protected; if below, they need to raise
+    const needsLPIncrease = baseLPCost < minLP;
+
+    // Step 5: Best-practice alerts
+    const alerts = [];
+    if (excisePctOfLP > 0.30) {
+      alerts.push({ type: "tax", icon: "🚨", text: `Excise is ${(excisePctOfLP * 100).toFixed(0)}% of LP — reserve 40-50% of gross for taxes` });
+    }
+    if (cashOutlayPct > 0.60) {
+      alerts.push({ type: "cash", icon: "💸", text: `Cash outlay is ${(cashOutlayPct * 100).toFixed(0)}% of LP revenue — maintain 6-9 month runway` });
+    }
+    if (actualMargin < 0.25 && actualMargin >= 0) {
+      alerts.push({ type: "margin", icon: "📉", text: `Post-excise margin is thin — consider raising LP or reducing COGS` });
+    }
 
     results.push({
-      province: natural.province,
+      province: province.name,
       provinceKey: provKey,
       baseLPCost,
-      adjustedLP,
-      lpPremium,
-      cogs,
+      minLPforMargin: minLP,
+      recommendedLP,
+      lpAdjustment,
+      needsLPIncrease,
+      cogs: actualCogs,
       excise,
-      landed,
-      wholesale,
-      naturalShelf,
-      actualShelf,
+      excisePctOfLP,
+      landed: calc.landedCost,
+      wholesale: calc.wholesalePrice + calc.mbSRFAmount,
+      consumerPrice: calc.consumerPrice,
+      cashOutlay,
+      cashOutlayPct,
       netProfit,
-      trueMargin,
-      matchesTarget
+      actualMargin,
+      marginBuffer,
+      marginStatus,
+      statusIcon,
+      alerts,
+      salesTaxLabel: calc.salesTaxLabel
     });
   }
 
-  // Sort by actual shelf price
-  return results.sort((a, b) => a.actualShelf - b.actualShelf);
+  // Sort by margin (worst provinces first — so you see risks at top)
+  return results.sort((a, b) => a.actualMargin - b.actualMargin);
 }
+
+/**
+ * Market baseline data for future competitor analysis.
+ * Will be populated from OCS/BCLDB/AGLC scraping or manual updates.
+ */
+const MARKET_BASELINES = {
+  dried_flower: { low: 4.00, mid: 6.50, high: 9.00, source: "Industry avg (2025)" },
+  trim: { low: 1.50, mid: 3.00, high: 5.00, source: "Industry avg (2025)" },
+  prerolls: { low: 5.00, mid: 7.50, high: 11.00, source: "Industry avg (2025)" },
+  infused_prerolls: { low: 7.00, mid: 10.00, high: 15.00, source: "Industry avg (2025)" },
+  vapes: { low: 15.00, mid: 22.00, high: 30.00, source: "Industry avg (2025)" },
+  edibles: { low: 3.50, mid: 5.50, high: 8.00, source: "Industry avg (2025)" },
+  extracts: { low: 20.00, mid: 30.00, high: 45.00, source: "Industry avg (2025)" },
+  oils: { low: 20.00, mid: 35.00, high: 55.00, source: "Industry avg (2025)" },
+  topicals: { low: 10.00, mid: 18.00, high: 28.00, source: "Industry avg (2025)" },
+  beverages: { low: 3.50, mid: 5.50, high: 8.00, source: "Industry avg (2025)" },
+  capsules: { low: 8.00, mid: 15.00, high: 25.00, source: "Industry avg (2025)" },
+  plants: { low: 15.00, mid: 25.00, high: 40.00, source: "Industry avg (2025)" },
+  seeds: { low: 3.00, mid: 5.00, high: 8.00, source: "Industry avg (2025)" }
+};
 
 // ============================================================
 // UI Controller
@@ -691,7 +774,7 @@ document.addEventListener("DOMContentLoaded", () => {
       featureName = "Margin_Analysis";
     } else if (balancedPanel.style.display !== "none") {
       source = balancedPanel;
-      featureName = "Price_Equalizer";
+      featureName = "Margin_Protection";
     } else if (scenarioPanel.style.display !== "none") {
       source = scenarioPanel;
       featureName = "Scenario";
@@ -857,8 +940,9 @@ document.addEventListener("DOMContentLoaded", () => {
     renderMarginAnalysis(marginResults, i.lp, PRODUCT_TYPES[i.productKey], i.cogsOverride);
   });
 
-  // 5. Price Equalizer (Uniform Shelf Pricing)
-  let lastEqualizerInputs = null;
+  // 5. Margin Protection (replaces Price Equalizer)
+  let lastProtectionInputs = null;
+  let lastProtectionMargin = 0.40; // default 40% target
   balancedBtn.addEventListener("click", () => {
     const i = getInputs();
     if (!validateBasic(i)) return;
@@ -867,17 +951,10 @@ document.addEventListener("DOMContentLoaded", () => {
     resultsPanel.classList.remove("visible");
     hideAllPanels();
 
-    lastEqualizerInputs = i;
+    lastProtectionInputs = i;
 
-    // Calculate all provinces at base LP to find the natural shelf price range
-    const allNatural = calculateAllProvinces(i.productKey, i.qty, i.thc, i.lp, i.retMk);
-    const maxShelf = Math.max(...allNatural.map(r => r.consumerPrice));
-
-    // Default target = highest natural shelf price (achievable for all)
-    const targetShelf = maxShelf;
-    const results = calculateUniformPricing(i.lp, targetShelf, i.productKey, i.qty, i.thc, i.retMk, i.cogsOverride);
-    const naturalMin = Math.min(...allNatural.map(r => r.consumerPrice));
-    renderPriceEqualizer(results, targetShelf, i.lp, naturalMin, maxShelf, PRODUCT_TYPES[i.productKey], i.cogsOverride);
+    const results = calculateMarginProtection(i.lp, lastProtectionMargin, i.productKey, i.qty, i.thc, i.retMk, i.cogsOverride);
+    renderMarginProtection(results, lastProtectionMargin, i.lp, PRODUCT_TYPES[i.productKey], i.productKey, i.cogsOverride);
   });
 
   // 6. Scenario Simulator
@@ -1386,53 +1463,67 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ── Render Balanced Margin ──
-  function renderPriceEqualizer(results, targetShelf, baseLPCost, naturalMin, naturalMax, product, cogsOverride = null) {
-    const matchCount = results.filter(r => r.matchesTarget).length;
+  function renderMarginProtection(results, targetMargin, baseLPCost, product, productKey, cogsOverride = null) {
     const totalCount = results.length;
-    const avgLP = results.reduce((sum, r) => sum + r.adjustedLP, 0) / totalCount;
-    const avgMargin = results.reduce((sum, r) => sum + r.trueMargin, 0) / totalCount;
-    const bestMargin = Math.max(...results.map(r => r.trueMargin));
-    const worstMargin = Math.min(...results.map(r => r.trueMargin));
+    const protectedCount = results.filter(r => r.marginStatus === 'protected').length;
+    const atRiskCount = results.filter(r => r.marginStatus === 'at-risk').length;
+    const belowCount = results.filter(r => r.marginStatus === 'below-floor').length;
+    const avgMargin = results.reduce((sum, r) => sum + r.actualMargin, 0) / totalCount;
+    const worstResult = results[0]; // sorted ascending by margin
+    const bestResult = results[results.length - 1];
+    const avgLP = results.reduce((sum, r) => sum + r.recommendedLP, 0) / totalCount;
+    const totalAlerts = results.reduce((sum, r) => sum + r.alerts.length, 0);
+    const needsIncrease = results.filter(r => r.needsLPIncrease).length;
+    const baseline = MARKET_BASELINES[productKey];
+
+    // Margin health color
+    const marginHealthClass = avgMargin >= 0.55 ? 'kpi-good' : avgMargin >= 0.40 ? 'kpi-ok' : 'kpi-bad';
+    const protectionClass = protectedCount === totalCount ? 'kpi-good' : protectedCount >= 10 ? 'kpi-ok' : 'kpi-bad';
 
     let html = `
-      <h2>⚖️ Price Equalizer — Uniform Shelf Pricing ${cogsBadge(cogsOverride)}</h2>
+      <h2>🛡️ Margin Protection — ${(targetMargin * 100).toFixed(0)}% Minimum ${cogsBadge(cogsOverride)}</h2>
       <p class="margin-intro">
-        Adjust each province's LP price to achieve a <strong>uniform consumer shelf price</strong>.
-        Your base LP of <strong>${fmt(baseLPCost)}</strong> is the floor — no province goes below it.
-        ${cogsOverride !== null ? 'COGS = <strong>' + fmt(cogsOverride) + '</strong> (actual).' : 'COGS assumed at <strong>50%</strong>.'}
+        Enforcing a minimum <strong>${(targetMargin * 100).toFixed(0)}% post-excise margin</strong> across all 13 provinces.
+        Your base LP of <strong>${fmt(baseLPCost)}</strong> is adjusted upward per province where margin falls short.
+        ${cogsOverride !== null ? 'COGS = <strong>' + fmt(cogsOverride) + '</strong> (actual).' : 'COGS assumed at <strong>50%</strong> of LP.'}
       </p>
 
       <div class="balanced-slider-group">
         <label>
-          Target Shelf Price: <strong id="eqTargetLabel">${fmt(targetShelf)}</strong>
+          Target Margin: <strong id="mpTargetLabel">${(targetMargin * 100).toFixed(0)}%</strong>
         </label>
-        <input type="range" id="eqSlider"
-          min="${Math.floor(naturalMin)}" max="${Math.ceil(naturalMax * 1.3)}"
-          value="${targetShelf.toFixed(0)}" step="0.50">
+        <input type="range" id="mpSlider"
+          min="20" max="70"
+          value="${(targetMargin * 100).toFixed(0)}" step="1">
         <div class="slider-labels">
-          <span>${fmt(Math.floor(naturalMin))}</span>
-          <span class="balanced-preset" data-val="${naturalMin.toFixed(0)}">Natural Min</span>
-          <span class="balanced-preset" data-val="${naturalMax.toFixed(0)}">Natural Max</span>
-          <span>${fmt(Math.ceil(naturalMax * 1.3))}</span>
+          <span>20%</span>
+          <span class="balanced-preset" data-val="40">40% Safe</span>
+          <span class="balanced-preset" data-val="55">55% Target</span>
+          <span class="balanced-preset" data-val="60">60% Premium</span>
+          <span>70%</span>
         </div>
       </div>
 
       <div class="margin-kpi-strip">
         <div class="kpi">
-          <span class="kpi-label">Target Shelf</span>
-          <span class="kpi-value kpi-good">${fmt(targetShelf)}</span>
+          <span class="kpi-label">Protected</span>
+          <span class="kpi-value ${protectionClass}">${protectedCount} / ${totalCount}</span>
         </div>
         <div class="kpi">
-          <span class="kpi-label">Provinces Matched</span>
-          <span class="kpi-value ${matchCount === totalCount ? 'kpi-good' : ''}">${matchCount} / ${totalCount}</span>
+          <span class="kpi-label">Avg Margin</span>
+          <span class="kpi-value ${marginHealthClass}">${pct(avgMargin)}</span>
         </div>
         <div class="kpi">
-          <span class="kpi-label">Avg LP Price</span>
-          <span class="kpi-value">${fmt(avgLP)}</span>
+          <span class="kpi-label">Worst Province</span>
+          <span class="kpi-value">${worstResult ? worstResult.province.split(' ')[0] : '—'} ${pct(worstResult ? worstResult.actualMargin : 0)}</span>
         </div>
         <div class="kpi">
-          <span class="kpi-label">Margin Range</span>
-          <span class="kpi-value">${pct(worstMargin)} – ${pct(bestMargin)}</span>
+          <span class="kpi-label">LP Increases Needed</span>
+          <span class="kpi-value ${needsIncrease > 0 ? 'kpi-bad' : 'kpi-good'}">${needsIncrease}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Alerts</span>
+          <span class="kpi-value ${totalAlerts > 0 ? 'kpi-bad' : 'kpi-good'}">${totalAlerts}</span>
         </div>
       </div>
 
@@ -1441,12 +1532,14 @@ document.addEventListener("DOMContentLoaded", () => {
           <thead>
             <tr>
               <th>Province</th>
-              <th>LP Price</th>
-              <th>Premium</th>
+              <th>Min LP</th>
+              <th>Rec. LP</th>
               <th>Excise</th>
-              <th>Landed</th>
-              <th>Shelf Price</th>
+              <th>Excise %</th>
+              <th>Cash Outlay</th>
+              <th>Net Profit</th>
               <th>Margin</th>
+              <th>Consumer</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -1455,24 +1548,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     results.forEach(r => {
       const prov = PROVINCES[r.provinceKey];
-      const marginClass = r.trueMargin >= 0.20 ? 'margin-good' : r.trueMargin >= 0 ? 'margin-ok' : 'margin-bad';
-      const premiumStr = r.lpPremium > 0.01 ? `+${fmt(r.lpPremium)}` : '—';
-      const premiumClass = r.lpPremium > 0.01 ? 'profit-good' : '';
-      const statusBadge = r.matchesTarget
-        ? '<span class="eq-badge eq-match">✓ Matched</span>'
-        : (r.naturalShelf > targetShelf
-          ? '<span class="eq-badge eq-over">▲ Above</span>'
-          : '<span class="eq-badge eq-floor">⬇ Floor</span>');
+      const marginClass = r.actualMargin >= 0.55 ? 'margin-good' : r.actualMargin >= targetMargin - 0.005 ? 'margin-ok' : 'margin-bad';
+      const exciseClass = r.excisePctOfLP > 0.30 ? 'margin-bad' : r.excisePctOfLP > 0.20 ? 'margin-ok' : '';
+      const lpChange = r.lpAdjustment > 0.01 ? `<span class="mp-increase">+${fmt(r.lpAdjustment)}</span>` : '';
+
+      const statusBadge = r.marginStatus === 'protected'
+        ? '<span class="mp-badge mp-protected">🛡️ Protected</span>'
+        : r.marginStatus === 'at-risk'
+          ? '<span class="mp-badge mp-at-risk">⚠️ At Risk</span>'
+          : '<span class="mp-badge mp-below">🚨 Below</span>';
+
+      const alertIcons = r.alerts.length > 0
+        ? `<span class="mp-alert-dot" title="${r.alerts.map(a => a.text).join('\n')}">${r.alerts.map(a => a.icon).join('')}</span>`
+        : '';
 
       html += `
-        <tr>
-          <td>${prov.flag} ${r.province}</td>
-          <td class="val-highlight">${fmt(r.adjustedLP)}</td>
-          <td class="${premiumClass}">${premiumStr}</td>
-          <td>${fmt(r.excise)}</td>
-          <td>${fmt(r.landed)}</td>
-          <td>${fmt(r.actualShelf)}</td>
-          <td class="${marginClass}">${pct(r.trueMargin)}</td>
+        <tr class="${r.marginStatus === 'below-floor' ? 'mp-row-danger' : r.marginStatus === 'at-risk' ? 'mp-row-warn' : ''}">
+          <td>${prov.flag} ${r.province} ${alertIcons}</td>
+          <td>${fmt(r.minLPforMargin)}</td>
+          <td class="val-highlight">${fmt(r.recommendedLP)} ${lpChange}</td>
+          <td class="${exciseClass}">${fmt(r.excise)}</td>
+          <td class="${exciseClass}">${(r.excisePctOfLP * 100).toFixed(1)}%</td>
+          <td>${fmt(r.cashOutlay)}</td>
+          <td class="${r.netProfit >= 0 ? 'profit-good' : 'margin-bad'}">${fmt(r.netProfit)}</td>
+          <td class="${marginClass}">${pct(r.actualMargin)}</td>
+          <td>${fmt(r.consumerPrice)}</td>
           <td>${statusBadge}</td>
         </tr>
       `;
@@ -1482,10 +1582,78 @@ document.addEventListener("DOMContentLoaded", () => {
           </tbody>
         </table>
       </div>
+    `;
 
+    // Risk summary
+    if (totalAlerts > 0 || needsIncrease > 0) {
+      const highExcise = results.filter(r => r.excisePctOfLP > 0.30);
+      const highCash = results.filter(r => r.cashOutlayPct > 0.60);
+      html += `
+        <div class="mp-risk-summary">
+          <h3>⚡ Risk Summary & Best Practices</h3>
+          <div class="mp-risk-grid">
+      `;
+      if (needsIncrease > 0) {
+        html += `<div class="mp-risk-card mp-risk-warn">
+          <strong>📊 ${needsIncrease} province${needsIncrease > 1 ? 's' : ''} need LP increase</strong>
+          <p>Your base LP of ${fmt(baseLPCost)} doesn't achieve ${(targetMargin * 100).toFixed(0)}% margin in all markets. Use the recommended LP prices above.</p>
+        </div>`;
+      }
+      if (highExcise.length > 0) {
+        html += `<div class="mp-risk-card mp-risk-warn">
+          <strong>🚨 High Excise Burden (${highExcise.length} province${highExcise.length > 1 ? 's' : ''})</strong>
+          <p>Excise exceeds 30% of LP cost. Reserve 40-50% of gross profit in a separate tax account. Consider batch size optimization to reduce per-unit testing costs.</p>
+        </div>`;
+      }
+      if (highCash.length > 0) {
+        html += `<div class="mp-risk-card mp-risk-danger">
+          <strong>💸 Cash Flow Pressure (${highCash.length} province${highCash.length > 1 ? 's' : ''})</strong>
+          <p>Cash outlay (COGS + excise) exceeds 60% of LP revenue. Maintain 6-9 month cash runway. Use COD or Net-7 terms for new buyers.</p>
+        </div>`;
+      }
+      html += `
+          </div>
+        </div>
+      `;
+    }
+
+    // Competitor analysis placeholder
+    if (baseline) {
+      const avgRecommended = avgLP;
+      const positionLabel = avgRecommended <= baseline.low ? 'Below Market (Value)'
+        : avgRecommended <= baseline.mid ? 'Below Average'
+          : avgRecommended <= baseline.high ? 'Market Average'
+            : 'Above Market (Premium)';
+      const positionClass = avgRecommended <= baseline.mid ? 'mp-pos-low' : avgRecommended <= baseline.high ? 'mp-pos-mid' : 'mp-pos-high';
+
+      html += `
+        <div class="mp-competitor-section">
+          <h3>📊 Market Position (Beta)</h3>
+          <p class="margin-intro">Based on industry pricing data for <strong>${product.label}</strong>.</p>
+          <div class="mp-market-bar">
+            <div class="mp-bar-segment mp-bar-low" style="flex:${baseline.mid - baseline.low}">
+              <span>Budget</span>
+              <span>${fmt(baseline.low)}</span>
+            </div>
+            <div class="mp-bar-segment mp-bar-mid" style="flex:${baseline.high - baseline.mid}">
+              <span>Market Avg</span>
+              <span>${fmt(baseline.mid)}</span>
+            </div>
+            <div class="mp-bar-segment mp-bar-high" style="flex:${baseline.high * 0.5}">
+              <span>Premium</span>
+              <span>${fmt(baseline.high)}+</span>
+            </div>
+          </div>
+          <p class="mp-position-label">Your avg recommended LP: <strong>${fmt(avgRecommended)}</strong> — <span class="${positionClass}">${positionLabel}</span></p>
+          <p class="margin-footnote">💡 Full competitor analysis with live OCS/BCLDB pricing data coming soon.</p>
+        </div>
+      `;
+    }
+
+    html += `
       <div class="margin-footnote">
-        <p>⚖️ Cheaper provinces get a higher LP price to match the target shelf price. Your margin improves in those markets.</p>
-        <p>"Above" = province's natural shelf exceeds target (LP stays at base). "Floor" = LP can't go below base.</p>
+        <p>🛡️ <strong>Min LP</strong> = lowest LP price achieving ${(targetMargin * 100).toFixed(0)}% margin. <strong>Rec. LP</strong> = max(your base, min required).</p>
+        <p>Industry best practice: cultivators target 40-60% gross margin pre-tax, with 15-25% post-tax cash margin.</p>
       </div>
     `;
 
@@ -1495,17 +1663,18 @@ document.addEventListener("DOMContentLoaded", () => {
     showExportBtn();
 
     // Wire up interactive slider
-    const slider = document.getElementById("eqSlider");
-    const label = document.getElementById("eqTargetLabel");
+    const slider = document.getElementById("mpSlider");
+    const label = document.getElementById("mpTargetLabel");
 
     slider.addEventListener("input", () => {
-      const newTarget = parseFloat(slider.value);
-      label.textContent = fmt(newTarget);
+      const newMargin = parseFloat(slider.value) / 100;
+      label.textContent = `${slider.value}%`;
+      lastProtectionMargin = newMargin;
 
-      if (lastEqualizerInputs) {
-        const i = lastEqualizerInputs;
-        const newResults = calculateUniformPricing(i.lp, newTarget, i.productKey, i.qty, i.thc, i.retMk, cogsOverride);
-        renderPriceEqualizer(newResults, newTarget, baseLPCost, naturalMin, naturalMax, product, cogsOverride);
+      if (lastProtectionInputs) {
+        const i = lastProtectionInputs;
+        const newResults = calculateMarginProtection(i.lp, newMargin, i.productKey, i.qty, i.thc, i.retMk, i.cogsOverride);
+        renderMarginProtection(newResults, newMargin, i.lp, product, productKey, i.cogsOverride);
       }
     });
 
