@@ -27,93 +27,194 @@
         retail price → consumer shelf price.</p>
     </header>
 
-    <!-- Input Panel -->
-    <section class="input-panel">
-      <h2>📋 Product &amp; Pricing Inputs</h2>
-      <div class="form-grid">
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="calculator">🧮 Calculator</button>
+      <button class="tab-btn" data-tab="comparison">📊 Price Comparison</button>
+    </nav>
 
-        <div class="form-group full-width">
-          <label for="productType">Product Type</label>
-          <select id="productType">
-            <option value="" disabled selected>Select a product type…</option>
-          </select>
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- TAB 1: Calculator (existing) -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div id="tab-calculator" class="tab-content active">
+
+      <!-- Input Panel -->
+      <section class="input-panel">
+        <h2>📋 Product &amp; Pricing Inputs</h2>
+        <div class="form-grid">
+
+          <div class="form-group full-width">
+            <label for="productType">Product Type</label>
+            <select id="productType">
+              <option value="" disabled selected>Select a product type…</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="province">Province / Territory</label>
+            <select id="province">
+              <option value="" disabled selected>Select province…</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label id="quantityLabel" for="quantity">Net Content (grams)</label>
+            <input type="number" id="quantity" placeholder="e.g. 3.5" min="0" step="any">
+          </div>
+
+          <div class="form-group" id="thcGroup">
+            <label for="thcMg">Total THC (mg)</label>
+            <input type="number" id="thcMg" placeholder="e.g. 100" min="0" step="any">
+          </div>
+
+          <div class="form-group">
+            <label for="lpCost">LP Production Cost / Target (CAD)</label>
+            <input type="number" id="lpCost" placeholder="e.g. 25.00" min="0" step="0.01">
+            <span class="field-hint">Your selling price per unit (excl. excise)</span>
+          </div>
+
+          <div class="form-group cogs-field">
+            <label for="trueCogs">True COGS (CAD) <span class="optional-badge">optional</span></label>
+            <input type="number" id="trueCogs" placeholder="e.g. 8.00" min="0" step="0.01">
+            <span class="field-hint">Your actual cost of goods sold (production, materials, labor). Leave blank for 50%
+              estimate.</span>
+          </div>
+
+          <div class="form-group full-width slider-group">
+            <label for="retailMarkup">
+              Retail Markup: <strong id="retailMarkupValue">39%</strong>
+            </label>
+            <input type="range" id="retailMarkup" min="0" max="100" value="39" step="1">
+            <div class="slider-labels">
+              <span>0%</span>
+              <span class="preset" data-val="30">Private 30%</span>
+              <span class="preset" data-val="39">OCS 39%</span>
+              <span class="preset" data-val="50">Premium 50%</span>
+              <span>100%</span>
+            </div>
+          </div>
+
+          <div class="form-group full-width action-buttons">
+            <button class="calculate-btn primary-btn" id="calculateBtn">
+              Calculate Forward Pipeline ➡️
+            </button>
+            <button class="calculate-btn balanced-btn" id="balancedBtn"
+              title="Find the minimum LP price per province to guarantee your target margin after COGS and excise">
+              Margin Protection 🛡️
+            </button>
+            <button class="calculate-btn scenario-btn" id="scenarioBtn"
+              title="Compare two pricing scenarios side by side">
+              Scenario Simulator 🔮
+            </button>
+          </div>
+
         </div>
+      </section>
 
-        <div class="form-group">
-          <label for="province">Province / Territory</label>
-          <select id="province">
-            <option value="" disabled selected>Select province…</option>
-          </select>
-        </div>
+      <!-- Results Panel -->
+      <section id="resultsPanel" class="results-container"></section>
 
-        <div class="form-group">
-          <label id="quantityLabel" for="quantity">Net Content (grams)</label>
-          <input type="number" id="quantity" placeholder="e.g. 3.5" min="0" step="any">
-        </div>
+      <!-- Balanced Margin Panel -->
+      <section id="balancedPanel" class="margin-container" style="display: none;"></section>
 
-        <div class="form-group" id="thcGroup">
-          <label for="thcMg">Total THC (mg)</label>
-          <input type="number" id="thcMg" placeholder="e.g. 100" min="0" step="any">
-        </div>
+      <!-- Scenario Simulator Panel -->
+      <section id="scenarioPanel" class="margin-container" style="display: none;"></section>
 
-        <div class="form-group">
-          <label for="lpCost">LP Production Cost / Target (CAD)</label>
-          <input type="number" id="lpCost" placeholder="e.g. 25.00" min="0" step="0.01">
-          <span class="field-hint">Your selling price per unit (excl. excise)</span>
-        </div>
+      <!-- Floating Export Button -->
+      <button id="exportPdfBtn" class="export-btn" style="display: none;" title="Export current view to PDF">
+        📊 Export PDF
+      </button>
 
-        <div class="form-group cogs-field">
-          <label for="trueCogs">True COGS (CAD) <span class="optional-badge">optional</span></label>
-          <input type="number" id="trueCogs" placeholder="e.g. 8.00" min="0" step="0.01">
-          <span class="field-hint">Your actual cost of goods sold (production, materials, labor). Leave blank for 50%
-            estimate.</span>
-        </div>
+    </div>
 
-        <div class="form-group full-width slider-group">
-          <label for="retailMarkup">
-            Retail Markup: <strong id="retailMarkupValue">39%</strong>
-          </label>
-          <input type="range" id="retailMarkup" min="0" max="100" value="39" step="1">
-          <div class="slider-labels">
-            <span>0%</span>
-            <span class="preset" data-val="30">Private 30%</span>
-            <span class="preset" data-val="39">OCS 39%</span>
-            <span class="preset" data-val="50">Premium 50%</span>
-            <span>100%</span>
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- TAB 2: Price Comparison -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div id="tab-comparison" class="tab-content">
+
+      <section class="pc-page">
+        <!-- Your Product Setup -->
+        <div class="pc-section pc-your-product">
+          <h2>📦 Your Product</h2>
+          <div class="pc-form-grid">
+            <div class="pc-field">
+              <label for="pcProductName">Product Name / SKU</label>
+              <input type="text" id="pcProductName" placeholder="e.g. Tribal Cuban Linx 3.5g">
+            </div>
+            <div class="pc-field">
+              <label for="pcCategory">Category</label>
+              <select id="pcCategory">
+                <option value="dried_flower">Dried Flower</option>
+                <option value="pre_rolls">Pre-Rolls</option>
+                <option value="vapes">Vapes</option>
+                <option value="edibles">Edibles</option>
+                <option value="extracts">Extracts</option>
+              </select>
+            </div>
+            <div class="pc-field">
+              <label for="pcWeight">Size / Weight</label>
+              <input type="text" id="pcWeight" placeholder="e.g. 3.5g">
+            </div>
+            <div class="pc-field">
+              <label for="pcYourPrice">Your Shelf Price (Pre-Tax)</label>
+              <input type="number" id="pcYourPrice" placeholder="e.g. 29.99" min="0" step="0.01">
+            </div>
           </div>
         </div>
 
-        <div class="form-group full-width action-buttons">
-          <button class="calculate-btn primary-btn" id="calculateBtn">
-            Calculate Forward Pipeline ➡️
-          </button>
-          <button class="calculate-btn balanced-btn" id="balancedBtn"
-            title="Find the minimum LP price per province to guarantee your target margin after COGS and excise">
-            Margin Protection 🛡️
-          </button>
-          <button class="calculate-btn scenario-btn" id="scenarioBtn"
-            title="Compare two pricing scenarios side by side">
-            Scenario Simulator 🔮
-          </button>
+        <!-- Competitor Entries -->
+        <div class="pc-section pc-competitors">
+          <div class="pc-section-header">
+            <h2>🏷️ Competitor Prices</h2>
+            <div class="pc-header-actions">
+              <a href="https://hibuddy.ca" target="_blank" rel="noopener" class="pc-hibuddy-link">
+                🔍 Look up prices on hibuddy.ca →
+              </a>
+              <button id="pcAddCompetitor" class="pc-add-btn">+ Add Competitor</button>
+            </div>
+          </div>
+          <p class="pc-hint">Enter competitor products at the same size/weight for accurate comparison. Check <a
+              href="https://hibuddy.ca" target="_blank" rel="noopener">hibuddy.ca</a> for live Ontario retail prices.
+          </p>
+
+          <div class="pc-comp-table">
+            <div class="pc-comp-header">
+              <span>Brand / Product</span>
+              <span>Shelf Price</span>
+              <span>Source</span>
+              <span></span>
+            </div>
+            <div id="pcCompetitorRows"></div>
+          </div>
         </div>
 
-      </div>
-    </section>
+        <!-- Comparison Results -->
+        <div id="pcResults" class="pc-section pc-results" style="display:none;">
 
-    <!-- Results Panel -->
-    <section id="resultsPanel" class="results-container"></section>
+          <!-- KPI Strip -->
+          <div class="pc-kpi-strip" id="pcKPIs"></div>
 
+          <!-- Visual Chart -->
+          <div class="pc-chart-section">
+            <h3>Price Position</h3>
+            <div id="pcChart" class="pc-chart"></div>
+          </div>
 
-    <!-- Balanced Margin Panel -->
-    <section id="balancedPanel" class="margin-container" style="display: none;"></section>
+          <!-- Insights -->
+          <div id="pcInsights" class="pc-insights"></div>
 
-    <!-- Scenario Simulator Panel -->
-    <section id="scenarioPanel" class="margin-container" style="display: none;"></section>
+          <!-- Market Range -->
+          <div class="pc-market-range">
+            <h3>Industry Pricing Context</h3>
+            <div id="pcMarketRange" class="pc-range-bar-container"></div>
+            <p class="pc-range-note">Based on Canadian cannabis market averages. Real-time data available at <a
+                href="https://hibuddy.ca" target="_blank" rel="noopener">hibuddy.ca</a></p>
+          </div>
+        </div>
 
-    <!-- Floating Export Button -->
-    <button id="exportPdfBtn" class="export-btn" style="display: none;" title="Export current view to PDF">
-      📊 Export PDF
-    </button>
+      </section>
+
+    </div>
 
     <!-- Footer -->
     <footer class="app-footer">
@@ -125,6 +226,7 @@
   </div>
 
   <script src="calculator.js"></script>
+  <script src="comparison.js"></script>
   <script>
     // Preset slider clicks
     document.querySelectorAll('.preset').forEach(el => {
@@ -132,6 +234,16 @@
         const slider = document.getElementById('retailMarkup');
         slider.value = el.dataset.val;
         slider.dispatchEvent(new Event('input'));
+      });
+    });
+
+    // Tab navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
       });
     });
   </script>
