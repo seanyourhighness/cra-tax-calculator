@@ -527,7 +527,8 @@ function calculateMarginAnalysis(productTypeKey, quantity, thcMg, lpCost, retail
       exciseAsPercentOfLP,
       roiPct,
       wholesalePrice: r.wholesalePrice + r.mbSRFAmount,
-      consumerPrice: r.consumerPrice
+      consumerPrice: r.consumerPrice,
+      shelfPrice: r.preTaxRetailPrice
     });
   }
 
@@ -646,6 +647,7 @@ function calculateMarginProtection(baseLPCost, targetMargin, productTypeKey, qua
       landed: calc.landedCost,
       wholesale: calc.wholesalePrice + calc.mbSRFAmount,
       consumerPrice: calc.consumerPrice,
+      shelfPrice: calc.preTaxRetailPrice,
       cashOutlay,
       cashOutlayPct,
       netProfit,
@@ -987,9 +989,9 @@ document.addEventListener("DOMContentLoaded", () => {
       comparison.push({
         province: a.province,
         provinceKey: a.provinceKey || Object.keys(PROVINCES)[idx],
-        shelfA: a.consumerPrice,
-        shelfB: b.consumerPrice,
-        shelfDelta: b.consumerPrice - a.consumerPrice,
+        shelfA: a.preTaxRetailPrice,
+        shelfB: b.preTaxRetailPrice,
+        shelfDelta: b.preTaxRetailPrice - a.preTaxRetailPrice,
         marginA,
         marginB,
         marginDelta: marginB - marginA,
@@ -1241,14 +1243,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     html += pipelineArrow("=");
 
-    // Final: Consumer Price
+    // Final: Shelf Price (pre-tax)
     html += `
       <div class="pipeline-step final">
         <div class="step-number">🍁</div>
         <div class="step-content">
-          <div class="step-label">Consumer Shelf Price</div>
-          <div class="step-value final-price">${fmt(r.consumerPrice)}</div>
-          <div class="step-details">Rounded to nearest $0.05</div>
+          <div class="step-label">Shelf Price (Pre-Tax)</div>
+          <div class="step-value final-price">${fmt(r.preTaxRetailPrice)}</div>
+          <div class="step-details">In-store tag price, before sales tax at register</div>
         </div>
       </div>
     `;
@@ -1280,7 +1282,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="summary-card">
           <div class="sc-label">LP Gets</div>
           <div class="sc-value">${fmt(r.lpCost)}</div>
-          <div class="sc-sub">${r.consumerPrice > 0 ? pct(r.lpCost / r.consumerPrice) + " of shelf price" : ""}</div>
+          <div class="sc-sub">${r.preTaxRetailPrice > 0 ? pct(r.lpCost / r.preTaxRetailPrice) + " of shelf price" : ""}</div>
         </div>
       </div>
     `;
@@ -1361,7 +1363,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td class="${marginClass}">${pct(trueMargin)}</td>
         <td>${fmt(r.wholesalePrice + r.mbSRFAmount)}</td>
         <td>${fmt(r.salesTaxAmount)}</td>
-        <td class="val-highlight">${fmt(r.consumerPrice)}</td>
+        <td class="val-highlight">${fmt(r.preTaxRetailPrice)}</td>
         <td>${r.effectiveTaxRate > 0 ? pct(r.effectiveTaxRate) : "N/A"}</td>
       `;
       matrixTableBody.appendChild(tr);
@@ -1440,7 +1442,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <td class="${profitClass}">${fmt(r.netProfit)}</td>
           <td class="${marginClass}">${pct(r.trueMarginPct)}</td>
           <td>${pct(r.exciseAsPercentOfLP)}</td>
-          <td class="val-highlight">${fmt(r.consumerPrice)}</td>
+          <td class="val-highlight">${fmt(r.shelfPrice || r.consumerPrice)}</td>
         </tr>
       `;
     });
@@ -1574,7 +1576,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <th>Cash Outlay</th>
               <th>Net Profit</th>
               <th>Margin</th>
-              <th>Consumer</th>
+              <th>Shelf Price</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -1607,7 +1609,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <td>${fmt(r.cashOutlay)}</td>
           <td class="${r.netProfit >= 0 ? 'profit-good' : 'margin-bad'}">${fmt(r.netProfit)}</td>
           <td class="${marginClass}">${pct(r.actualMargin)}</td>
-          <td>${fmt(r.consumerPrice)}</td>
+          <td>${fmt(r.shelfPrice)}</td>
           <td>${statusBadge}</td>
         </tr>
       `;
