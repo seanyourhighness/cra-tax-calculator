@@ -388,16 +388,16 @@ input[type="range"]::-webkit-slider-thumb {
    ============================================================ */
 
 #resultsPanel {
+  display: none;
   opacity: 0;
   transform: translateY(20px);
   transition: opacity 0.5s ease, transform 0.5s ease;
-  pointer-events: none;
 }
 
 #resultsPanel.visible {
+  display: block;
   opacity: 1;
   transform: translateY(0);
-  pointer-events: auto;
 }
 
 .results-header {
@@ -672,16 +672,9 @@ input[type="range"]::-webkit-slider-thumb {
    Matrix Table
    ============================================================ */
 
-.matrix-container {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  padding: 1.25rem;
-  backdrop-filter: blur(20px);
-  box-shadow: var(--shadow-lg);
-  margin-top: 1.5rem;
-  animation: fadeIn 0.4s ease;
-}
+/* ============================================================
+   Data Tables (used by Margin Protection)
+   ============================================================ */
 
 @keyframes fadeIn {
   from {
@@ -693,14 +686,6 @@ input[type="range"]::-webkit-slider-thumb {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.matrix-container h2 {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 1.5rem;
-  color: var(--text-primary);
-  text-align: center;
 }
 
 .table-responsive {
@@ -750,14 +735,6 @@ input[type="range"]::-webkit-slider-thumb {
 .val-highlight {
   color: var(--accent-emerald);
   font-weight: 700;
-}
-
-.matrix-container h2 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-  text-align: center;
 }
 
 /* ============================================================

@@ -59,7 +59,7 @@
         <div class="form-group">
           <label for="lpCost">LP Production Cost / Target (CAD)</label>
           <input type="number" id="lpCost" placeholder="e.g. 25.00" min="0" step="0.01">
-          <span class="field-hint">Your selling price (excl. excise) OR target if using Reverse Solver</span>
+          <span class="field-hint">Your selling price per unit (excl. excise)</span>
         </div>
 
         <div class="form-group cogs-field">
@@ -87,18 +87,6 @@
           <button class="calculate-btn primary-btn" id="calculateBtn">
             Calculate Forward Pipeline ➡️
           </button>
-          <button class="calculate-btn secondary-btn" id="reverseBtn"
-            title="Find required LP Cost to hit a exact Retail Target Shelf Price">
-            Reverse Solver (Target Price) 🎯
-          </button>
-          <button class="calculate-btn margin-btn" id="marginBtn"
-            title="See your real costs, out-of-pocket expense, and true margins across all provinces">
-            Cost & Margin Analysis 💰
-          </button>
-          <button class="calculate-btn tertiary-btn" id="matrixBtn"
-            title="Compare calculation across all 13 tracking provinces at once">
-            All-Province Matrix 🇨🇦
-          </button>
           <button class="calculate-btn balanced-btn" id="balancedBtn"
             title="Find the minimum LP price per province to guarantee your target margin after COGS and excise">
             Margin Protection 🛡️
@@ -115,30 +103,6 @@
     <!-- Results Panel -->
     <section id="resultsPanel" class="results-container"></section>
 
-    <!-- Matrix Modal/Panel -->
-    <section id="matrixPanel" class="matrix-container" style="display: none;">
-      <h2>🇨🇦 Multi-Province Comparison Matrix</h2>
-      <div class="table-responsive">
-        <table id="matrixTable" class="data-table">
-          <thead>
-            <tr>
-              <th>Province</th>
-              <th>Excise</th>
-              <th>Landed</th>
-              <th>Margin</th>
-              <th>Wholesale</th>
-              <th>Taxes</th>
-              <th>Shelf Price</th>
-              <th>Gov. %</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Margin Analysis Panel -->
-    <section id="marginPanel" class="margin-container" style="display: none;"></section>
 
     <!-- Balanced Margin Panel -->
     <section id="balancedPanel" class="margin-container" style="display: none;"></section>
