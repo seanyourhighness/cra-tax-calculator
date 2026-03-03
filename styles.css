@@ -1045,14 +1045,135 @@ input[type="range"]::-webkit-slider-thumb {
 /* Margin Protection Slider Row */
 .mp-slider-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 1.5rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
+  .mp-slider-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
   .mp-slider-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* Cash Flow & Breakeven Section */
+.mp-cashflow-section {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+}
+
+.mp-cashflow-section h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.mp-cashflow-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+  .mp-cashflow-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mp-cashflow-card {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+}
+
+.mp-cashflow-card strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.mp-cycle-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  font-size: 0.8rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.mp-cycle-row:last-child {
+  border-bottom: none;
+}
+
+/* Province Breakeven Bar Chart */
+.mp-province-breakeven {
+  margin-top: 1.25rem;
+}
+
+.mp-province-breakeven h4 {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.mp-breakeven-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mp-be-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 60px;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mp-be-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.mp-be-track {
+  height: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.mp-be-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.mp-be-good {
+  background: rgba(16, 185, 129, 0.4);
+}
+
+.mp-be-mid {
+  background: rgba(245, 158, 11, 0.4);
+}
+
+.mp-be-bad {
+  background: rgba(239, 68, 68, 0.4);
+}
+
+.mp-be-value {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: right;
 }
 
 /* Margin Protection Badges */

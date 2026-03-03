@@ -1521,6 +1521,22 @@ document.addEventListener("DOMContentLoaded", () => {
             <span>100%</span>
           </div>
         </div>
+
+        <div class="balanced-slider-group">
+          <label>
+            Monthly Overhead: <strong id="mpOverheadLabel">$10,000</strong>
+          </label>
+          <input type="range" id="mpOverheadSlider"
+            min="0" max="100000"
+            value="10000" step="500">
+          <div class="slider-labels">
+            <span>$0</span>
+            <span class="balanced-preset mp-overhead-preset" data-val="5000">$5K</span>
+            <span class="balanced-preset mp-overhead-preset" data-val="15000">$15K</span>
+            <span class="balanced-preset mp-overhead-preset" data-val="30000">$30K</span>
+            <span>$100K</span>
+          </div>
+        </div>
       </div>
 
       <div class="margin-kpi-strip">
@@ -1600,6 +1616,106 @@ document.addEventListener("DOMContentLoaded", () => {
     html += `
           </tbody>
         </table>
+      </div>
+    `;
+
+    // ── Breakeven & Cash Flow Section ──
+    const overhead = parseFloat(document.getElementById('mpOverheadSlider')?.value || 10000);
+    const avgProfit = results.reduce((s, r) => s + r.netProfit, 0) / totalCount;
+    const avgCashOutlay = results.reduce((s, r) => s + r.cashOutlay, 0) / totalCount;
+    const avgRecLP = avgLP;
+    const worstProfit = worstResult ? worstResult.netProfit : 0;
+    const bestProfit = bestResult ? bestResult.netProfit : 0;
+
+    // Breakeven units per month = overhead / net profit per unit
+    const avgBreakevenUnits = avgProfit > 0 ? Math.ceil(overhead / avgProfit) : Infinity;
+    const worstBreakevenUnits = worstProfit > 0 ? Math.ceil(overhead / worstProfit) : Infinity;
+    const bestBreakevenUnits = bestProfit > 0 ? Math.ceil(overhead / bestProfit) : Infinity;
+
+    // Cash flow: working capital needed for one month's breakeven production
+    const avgWorkingCapital = avgBreakevenUnits !== Infinity ? avgBreakevenUnits * avgCashOutlay : 0;
+    // ROI per cycle = net profit / cash outlay
+    const avgROI = avgCashOutlay > 0 ? avgProfit / avgCashOutlay : 0;
+    // Capital efficiency = how many $ revenue per $ invested
+    const capitalEfficiency = avgCashOutlay > 0 ? avgRecLP / avgCashOutlay : 0;
+
+    html += `
+      <div class="mp-cashflow-section">
+        <h3>📈 Breakeven & Cash Flow Planning</h3>
+        <p class="margin-intro">Based on monthly overhead of <strong>${fmt(overhead)}</strong>. Adjust with the slider above.</p>
+
+        <div class="margin-kpi-strip">
+          <div class="kpi">
+            <span class="kpi-label">Avg Breakeven</span>
+            <span class="kpi-value">${avgBreakevenUnits !== Infinity ? avgBreakevenUnits.toLocaleString() + ' units/mo' : '∞'}</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Worst Breakeven</span>
+            <span class="kpi-value kpi-bad">${worstBreakevenUnits !== Infinity ? worstBreakevenUnits.toLocaleString() + ' units/mo' : '∞'}</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Best Breakeven</span>
+            <span class="kpi-value kpi-good">${bestBreakevenUnits !== Infinity ? bestBreakevenUnits.toLocaleString() + ' units/mo' : '∞'}</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Working Capital</span>
+            <span class="kpi-value">${avgWorkingCapital > 0 ? fmt(avgWorkingCapital) : '—'}</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">ROI/Cycle</span>
+            <span class="kpi-value ${avgROI >= 0.30 ? 'kpi-good' : avgROI >= 0.15 ? 'kpi-ok' : 'kpi-bad'}">${(avgROI * 100).toFixed(1)}%</span>
+          </div>
+        </div>
+
+        <div class="mp-cashflow-grid">
+          <div class="mp-cashflow-card">
+            <strong>💰 Per Unit Cash Cycle</strong>
+            <div class="mp-cycle-row"><span>Day 0:</span> <span>You pay COGS + Excise = <strong>${fmt(avgCashOutlay)}</strong></span></div>
+            <div class="mp-cycle-row"><span>Day 1-14:</span> <span>Product in transit to distributor</span></div>
+            <div class="mp-cycle-row"><span>Day 30-60:</span> <span>LP receives payment = <strong>${fmt(avgRecLP)}</strong></span></div>
+            <div class="mp-cycle-row"><span>Net gain:</span> <span class="${avgProfit >= 0 ? 'profit-good' : 'margin-bad'}"><strong>${fmt(avgProfit)}</strong> per unit</span></div>
+          </div>
+          <div class="mp-cashflow-card">
+            <strong>📊 Monthly Production Target</strong>
+            <div class="mp-cycle-row"><span>Overhead:</span> <span>${fmt(overhead)}/mo</span></div>
+            <div class="mp-cycle-row"><span>Units to break even:</span> <span><strong>${avgBreakevenUnits !== Infinity ? avgBreakevenUnits.toLocaleString() : '∞'}</strong></span></div>
+            <div class="mp-cycle-row"><span>Capital needed:</span> <span><strong>${avgWorkingCapital > 0 ? fmt(avgWorkingCapital) : '—'}</strong></span></div>
+            <div class="mp-cycle-row"><span>Capital efficiency:</span> <span><strong>${capitalEfficiency.toFixed(2)}x</strong> (${fmt(capitalEfficiency)} revenue per $1 invested)</span></div>
+          </div>
+        </div>
+
+        <div class="mp-province-breakeven">
+          <h4>Province Breakeven Comparison (units/month for ${fmt(overhead)} overhead)</h4>
+          <div class="mp-breakeven-bars">
+    `;
+
+    // Sort by breakeven (best first)
+    const breakevenSorted = [...results]
+      .map(r => ({ ...r, beUnits: r.netProfit > 0 ? Math.ceil(overhead / r.netProfit) : Infinity }))
+      .filter(r => r.beUnits !== Infinity)
+      .sort((a, b) => a.beUnits - b.beUnits);
+
+    const maxBE = breakevenSorted.length > 0 ? breakevenSorted[breakevenSorted.length - 1].beUnits : 1;
+
+    breakevenSorted.forEach(r => {
+      const prov = PROVINCES[r.provinceKey];
+      const barWidth = maxBE > 0 ? (r.beUnits / maxBE * 100) : 0;
+      const barClass = r.beUnits <= avgBreakevenUnits * 0.8 ? 'mp-be-good' : r.beUnits >= avgBreakevenUnits * 1.2 ? 'mp-be-bad' : 'mp-be-mid';
+
+      html += `
+        <div class="mp-be-row">
+          <span class="mp-be-label">${prov.flag} ${r.province.split(' ')[0]}</span>
+          <div class="mp-be-track">
+            <div class="mp-be-fill ${barClass}" style="width:${barWidth}%"></div>
+          </div>
+          <span class="mp-be-value">${r.beUnits.toLocaleString()}</span>
+        </div>
+      `;
+    });
+
+    html += `
+          </div>
+        </div>
       </div>
     `;
 
@@ -1712,8 +1828,19 @@ document.addEventListener("DOMContentLoaded", () => {
       rerunProtection(lastProtectionMargin, newRetail);
     });
 
+    // Overhead slider
+    const overheadSlider = document.getElementById("mpOverheadSlider");
+    const overheadLabel = document.getElementById("mpOverheadLabel");
+    if (overheadSlider) {
+      overheadSlider.addEventListener("input", () => {
+        overheadLabel.textContent = fmt(parseFloat(overheadSlider.value));
+        // Rerun to update breakeven numbers
+        rerunProtection(lastProtectionMargin, retailMarkupPct);
+      });
+    }
+
     // Wire up presets (margin)
-    balancedPanel.querySelectorAll('.balanced-preset:not(.mp-retail-preset)').forEach(el => {
+    balancedPanel.querySelectorAll('.balanced-preset:not(.mp-retail-preset):not(.mp-overhead-preset)').forEach(el => {
       el.addEventListener('click', () => {
         marginSlider.value = el.dataset.val;
         marginSlider.dispatchEvent(new Event('input'));
@@ -1725,6 +1852,16 @@ document.addEventListener("DOMContentLoaded", () => {
       el.addEventListener('click', () => {
         retailSliderMP.value = el.dataset.val;
         retailSliderMP.dispatchEvent(new Event('input'));
+      });
+    });
+
+    // Wire up presets (overhead)
+    balancedPanel.querySelectorAll('.mp-overhead-preset').forEach(el => {
+      el.addEventListener('click', () => {
+        if (overheadSlider) {
+          overheadSlider.value = el.dataset.val;
+          overheadSlider.dispatchEvent(new Event('input'));
+        }
       });
     });
   }
