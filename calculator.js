@@ -142,15 +142,17 @@ const PROVINCES = {
     name: "Ontario", flag: "🍁",
     adjustmentRate: 0.039, coordinated: true,
     salesTaxRate: 0.13, salesTaxLabel: "HST (13%)",
-    wholesaleMarkup: null, // uses OCS category markup
-    wholesaleMarkupLabel: "OCS Wholesale Markup"
+    wholesaleMarkup: null,
+    wholesaleMarkupLabel: "OCS Wholesale Markup",
+    paymentTermDays: 30, distributor: "OCS"
   },
   AB: {
     name: "Alberta", flag: "🏔️",
     adjustmentRate: 0.168, coordinated: true,
     salesTaxRate: 0.05, salesTaxLabel: "GST (5%)",
     wholesaleMarkup: 0.06,
-    wholesaleMarkupLabel: "AGLC 6% Ad Valorem Markup"
+    wholesaleMarkupLabel: "AGLC 6% Ad Valorem Markup",
+    paymentTermDays: 15, distributor: "AGLC"
   },
   BC: {
     name: "British Columbia", flag: "🌲",
@@ -159,21 +161,24 @@ const PROVINCES = {
     // BC charges 20% PST on vaping products (devices, cartridges, cannabis e-juice)
     vapeSalesTaxRate: 0.25, vapeSalesTaxLabel: "GST + PST (5% + 20%)",
     wholesaleMarkup: 0.15,
-    wholesaleMarkupLabel: "BCLDB 15% Wholesale Markup"
+    wholesaleMarkupLabel: "BCLDB 15% Wholesale Markup",
+    paymentTermDays: 30, distributor: "BCLDB"
   },
   QC: {
     name: "Quebec", flag: "⚜️",
     adjustmentRate: 0, coordinated: true,
     salesTaxRate: 0.14975, salesTaxLabel: "GST + QST (5% + 9.975%)",
     wholesaleMarkup: 0.20,
-    wholesaleMarkupLabel: "SQDC Markup (~20%)"
+    wholesaleMarkupLabel: "SQDC Markup (~20%)",
+    paymentTermDays: 45, distributor: "SQDC"
   },
   SK: {
     name: "Saskatchewan", flag: "🌾",
     adjustmentRate: 0.0645, coordinated: true,
     salesTaxRate: 0.11, salesTaxLabel: "GST + PST (5% + 6%)",
     wholesaleMarkup: 0.0,
-    wholesaleMarkupLabel: "Direct-to-Retail (0% Wholesale)"
+    wholesaleMarkupLabel: "Direct-to-Retail (0% Wholesale)",
+    paymentTermDays: 30, distributor: "SLGA"
   },
   MB: {
     name: "Manitoba", flag: "🦬",
@@ -182,42 +187,48 @@ const PROVINCES = {
     wholesaleMarkup: 0.09,
     wholesaleMarkupLabel: "MBLL 9% Markup",
     mbSocialResp: 0.06,
-    mbSRFLabel: "6% Social Responsibility Fee"
+    mbSRFLabel: "6% Social Responsibility Fee",
+    paymentTermDays: 30, distributor: "MBLL"
   },
   NB: {
     name: "New Brunswick", flag: "⚓",
     adjustmentRate: 0, coordinated: true,
     salesTaxRate: 0.15, salesTaxLabel: "HST (15%)",
     wholesaleMarkup: 0.20,
-    wholesaleMarkupLabel: "Cannabis NB Markup (~20%)"
+    wholesaleMarkupLabel: "Cannabis NB Markup (~20%)",
+    paymentTermDays: 30, distributor: "Cannabis NB"
   },
   NL: {
     name: "Newfoundland & Labrador", flag: "🐟",
     adjustmentRate: 0, coordinated: true,
     salesTaxRate: 0.15, salesTaxLabel: "HST (15%)",
     wholesaleMarkup: 0.0225,
-    wholesaleMarkupLabel: "NLC 2.25% Consignment Fee"
+    wholesaleMarkupLabel: "NLC 2.25% Consignment Fee",
+    paymentTermDays: 30, distributor: "NLC"
   },
   NS: {
     name: "Nova Scotia", flag: "⚓",
     adjustmentRate: 0, coordinated: true,
     salesTaxRate: 0.14, salesTaxLabel: "HST (14%)",
     wholesaleMarkup: 0.20,
-    wholesaleMarkupLabel: "NSLC Markup (~20%)"
+    wholesaleMarkupLabel: "NSLC Markup (~20%)",
+    paymentTermDays: 30, distributor: "NSLC"
   },
   PE: {
     name: "Prince Edward Island", flag: "🥔",
     adjustmentRate: 0, coordinated: true,
     salesTaxRate: 0.15, salesTaxLabel: "HST (15%)",
     wholesaleMarkup: 0.20,
-    wholesaleMarkupLabel: "PEI Cannabis Markup (~20%)"
+    wholesaleMarkupLabel: "PEI Cannabis Markup (~20%)",
+    paymentTermDays: 30, distributor: "PEI Cannabis"
   },
   NT: {
     name: "Northwest Territories", flag: "❄️",
     adjustmentRate: 0, coordinated: true,
     salesTaxRate: 0.05, salesTaxLabel: "GST (5%)",
     wholesaleMarkup: 0.34,
-    wholesaleMarkupLabel: "NTLL 34% Standard Markup"
+    wholesaleMarkupLabel: "NTLL 34% Standard Markup",
+    paymentTermDays: 30, distributor: "NTLL"
   },
   NU: {
     name: "Nunavut", flag: "🏔️",
@@ -225,14 +236,16 @@ const PROVINCES = {
     salesTaxRate: 0.05, salesTaxLabel: "GST (5%)",
     wholesaleMarkup: 0,
     wholesaleMarkupLabel: "NULC ($1/g Flat Retail Markup)",
-    nuFlatRetail: 1.00
+    nuFlatRetail: 1.00,
+    paymentTermDays: 30, distributor: "NULC"
   },
   YT: {
     name: "Yukon", flag: "🐻",
     adjustmentRate: 0, coordinated: true,
     salesTaxRate: 0.05, salesTaxLabel: "GST (5%)",
     wholesaleMarkup: 0.235,
-    wholesaleMarkupLabel: "YLC 20% Markup + 3.5% Logistics"
+    wholesaleMarkupLabel: "YLC 20% Markup + 3.5% Logistics",
+    paymentTermDays: 30, distributor: "YLC"
   }
 };
 
@@ -683,6 +696,12 @@ const MARKET_BASELINES = {
   plants: { low: 15.00, mid: 25.00, high: 40.00, source: "Industry avg (2025)" },
   seeds: { low: 3.00, mid: 5.00, high: 8.00, source: "Industry avg (2025)" }
 };
+
+/**
+ * Persistent competitor prices — survives slider re-renders.
+ * Each entry: { brand: string, price: number }
+ */
+let savedCompetitorPrices = [];
 
 // ============================================================
 // UI Controller
@@ -1754,35 +1773,137 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     }
 
-    // Competitor analysis placeholder
+    // ── Competitor Price Comparison ──
     if (baseline) {
       const avgRecommended = avgLP;
-      const positionLabel = avgRecommended <= baseline.low ? 'Below Market (Value)'
-        : avgRecommended <= baseline.mid ? 'Below Average'
-          : avgRecommended <= baseline.high ? 'Market Average'
-            : 'Above Market (Premium)';
-      const positionClass = avgRecommended <= baseline.mid ? 'mp-pos-low' : avgRecommended <= baseline.high ? 'mp-pos-mid' : 'mp-pos-high';
+
+      // Calculate average shelf price across all provinces (pre-tax)
+      const avgShelf = results.reduce((s, r) => s + r.shelfPrice, 0) / totalCount;
 
       html += `
         <div class="mp-competitor-section">
-          <h3>📊 Market Position (Beta)</h3>
-          <p class="margin-intro">Based on industry pricing data for <strong>${product.label}</strong>.</p>
-          <div class="mp-market-bar">
-            <div class="mp-bar-segment mp-bar-low" style="flex:${baseline.mid - baseline.low}">
-              <span>Budget</span>
-              <span>${fmt(baseline.low)}</span>
+          <h3>\ud83c\udfaf Competitor Price Comparison</h3>
+          <p class="margin-intro">Enter competitor shelf prices to see how your product stacks up. Prices should be <strong>pre-tax shelf prices</strong> (what's on the tag).</p>
+
+          <div class="cp-input-area">
+            <div class="cp-inputs" id="cpInputs">
+      `;
+
+      // Render existing competitor entries
+      savedCompetitorPrices.forEach((comp, idx) => {
+        html += `
+          <div class="cp-row" data-idx="${idx}">
+            <input type="text" class="cp-brand" placeholder="Brand name" value="${comp.brand}" data-idx="${idx}">
+            <input type="number" class="cp-price" placeholder="Shelf price" value="${comp.price || ''}" step="0.01" min="0" data-idx="${idx}">
+            <button class="cp-remove" data-idx="${idx}">\u2716</button>
+          </div>
+        `;
+      });
+
+      // Always show one empty row for adding
+      html += `
             </div>
-            <div class="mp-bar-segment mp-bar-mid" style="flex:${baseline.high - baseline.mid}">
-              <span>Market Avg</span>
-              <span>${fmt(baseline.mid)}</span>
+            <button class="cp-add-btn" id="cpAddBtn">+ Add Competitor</button>
+          </div>
+      `;
+
+      // Comparison visualization (only if we have competitor data)
+      const validComps = savedCompetitorPrices.filter(c => c.price > 0 && c.brand.trim());
+      if (validComps.length > 0) {
+        const allPrices = [{ brand: "You (avg shelf)", price: avgShelf, isYou: true }, ...validComps.map(c => ({ ...c, isYou: false }))];
+        allPrices.sort((a, b) => a.price - b.price);
+        const maxPrice = Math.max(...allPrices.map(p => p.price));
+        const minPrice = Math.min(...allPrices.map(p => p.price));
+        const avgCompPrice = validComps.reduce((s, c) => s + c.price, 0) / validComps.length;
+        const yourVsAvg = avgShelf - avgCompPrice;
+        const yourVsAvgPct = avgCompPrice > 0 ? (yourVsAvg / avgCompPrice * 100) : 0;
+
+        const positionLabel = yourVsAvgPct <= -10 ? 'Well Below Market'
+          : yourVsAvgPct <= -3 ? 'Below Market'
+            : yourVsAvgPct <= 3 ? 'Market Rate'
+              : yourVsAvgPct <= 10 ? 'Above Market'
+                : 'Well Above Market';
+
+        const positionClass = yourVsAvgPct <= -3 ? 'mp-pos-low'
+          : yourVsAvgPct <= 3 ? 'mp-pos-mid'
+            : 'mp-pos-high';
+
+        const positionIcon = yourVsAvgPct <= -3 ? '\ud83d\udfe2'
+          : yourVsAvgPct <= 3 ? '\ud83d\udfe1'
+            : '\ud83d\udfe0';
+
+        html += `
+          <div class="cp-summary">
+            <div class="margin-kpi-strip">
+              <div class="kpi">
+                <span class="kpi-label">Your Avg Shelf</span>
+                <span class="kpi-value">${fmt(avgShelf)}</span>
+              </div>
+              <div class="kpi">
+                <span class="kpi-label">Competitor Avg</span>
+                <span class="kpi-value">${fmt(avgCompPrice)}</span>
+              </div>
+              <div class="kpi">
+                <span class="kpi-label">Difference</span>
+                <span class="kpi-value ${yourVsAvg >= 0 ? 'kpi-bad' : 'kpi-good'}">${yourVsAvg >= 0 ? '+' : ''}${fmt(yourVsAvg)}</span>
+              </div>
+              <div class="kpi">
+                <span class="kpi-label">Position</span>
+                <span class="kpi-value ${positionClass}">${positionIcon} ${positionLabel}</span>
+              </div>
             </div>
-            <div class="mp-bar-segment mp-bar-high" style="flex:${baseline.high * 0.5}">
-              <span>Premium</span>
-              <span>${fmt(baseline.high)}+</span>
+
+            <div class="cp-bars">
+        `;
+
+        allPrices.forEach(p => {
+          const barWidth = maxPrice > 0 ? (p.price / maxPrice * 100) : 0;
+          const barClass = p.isYou ? 'cp-bar-you' : 'cp-bar-comp';
+          const label = p.isYou ? `\u2b50 ${p.brand}` : p.brand;
+          html += `
+            <div class="cp-bar-row">
+              <span class="cp-bar-label ${p.isYou ? 'cp-bar-label-you' : ''}">${label}</span>
+              <div class="mp-be-track">
+                <div class="mp-be-fill ${barClass}" style="width:${barWidth}%"></div>
+              </div>
+              <span class="cp-bar-price ${p.isYou ? 'cp-bar-label-you' : ''}">${fmt(p.price)}</span>
+            </div>
+          `;
+        });
+
+        html += `
             </div>
           </div>
-          <p class="mp-position-label">Your avg recommended LP: <strong>${fmt(avgRecommended)}</strong> — <span class="${positionClass}">${positionLabel}</span></p>
-          <p class="margin-footnote">💡 Full competitor analysis with live OCS/BCLDB pricing data coming soon.</p>
+        `;
+
+        // Alert if significantly above/below
+        if (yourVsAvgPct > 10) {
+          html += `<div class="mp-risk-card mp-risk-warn"><strong>\ud83d\udfe0 Priced Above Market</strong><p>Your avg shelf price is ${yourVsAvgPct.toFixed(0)}% above competitors. This may limit sell-through velocity unless justified by brand/quality differentiation.</p></div>`;
+        } else if (yourVsAvgPct < -10) {
+          html += `<div class="mp-risk-card" style="background:rgba(16,185,129,0.08);border-left:3px solid var(--accent-emerald)"><strong>\ud83d\udfe2 Priced Below Market</strong><p>Your avg shelf price is ${Math.abs(yourVsAvgPct).toFixed(0)}% below competitors. Good for velocity, but verify your margins are still protected above.</p></div>`;
+        }
+      }
+
+      // Market baseline bar (always show)
+      html += `
+          <div class="cp-market-baseline">
+            <h4>Industry Pricing Range \u2014 ${product.label}</h4>
+            <div class="mp-market-bar">
+              <div class="mp-bar-segment mp-bar-low" style="flex:${baseline.mid - baseline.low}">
+                <span>Budget</span>
+                <span>${fmt(baseline.low)}</span>
+              </div>
+              <div class="mp-bar-segment mp-bar-mid" style="flex:${baseline.high - baseline.mid}">
+                <span>Market Avg</span>
+                <span>${fmt(baseline.mid)}</span>
+              </div>
+              <div class="mp-bar-segment mp-bar-high" style="flex:${baseline.high * 0.5}">
+                <span>Premium</span>
+                <span>${fmt(baseline.high)}+</span>
+              </div>
+            </div>
+            <p class="margin-footnote">\ud83d\udca1 Tip: Check <a href="https://hibuddy.ca" target="_blank" rel="noopener">hibuddy.ca</a> for live Ontario shelf prices to input above.</p>
+          </div>
         </div>
       `;
     }
@@ -1864,6 +1985,47 @@ document.addEventListener("DOMContentLoaded", () => {
           overheadSlider.value = el.dataset.val;
           overheadSlider.dispatchEvent(new Event('input'));
         }
+      });
+    });
+
+    // Wire up competitor inputs
+    const cpAddBtn = document.getElementById('cpAddBtn');
+    if (cpAddBtn) {
+      cpAddBtn.addEventListener('click', () => {
+        if (savedCompetitorPrices.length >= 5) return; // max 5
+        savedCompetitorPrices.push({ brand: '', price: 0 });
+        rerunProtection(lastProtectionMargin, retailMarkupPct);
+      });
+    }
+
+    // Brand input changes
+    balancedPanel.querySelectorAll('.cp-brand').forEach(el => {
+      el.addEventListener('change', () => {
+        const idx = parseInt(el.dataset.idx);
+        if (savedCompetitorPrices[idx]) {
+          savedCompetitorPrices[idx].brand = el.value;
+          rerunProtection(lastProtectionMargin, retailMarkupPct);
+        }
+      });
+    });
+
+    // Price input changes
+    balancedPanel.querySelectorAll('.cp-price').forEach(el => {
+      el.addEventListener('change', () => {
+        const idx = parseInt(el.dataset.idx);
+        if (savedCompetitorPrices[idx]) {
+          savedCompetitorPrices[idx].price = parseFloat(el.value) || 0;
+          rerunProtection(lastProtectionMargin, retailMarkupPct);
+        }
+      });
+    });
+
+    // Remove competitor
+    balancedPanel.querySelectorAll('.cp-remove').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.idx);
+        savedCompetitorPrices.splice(idx, 1);
+        rerunProtection(lastProtectionMargin, retailMarkupPct);
       });
     });
   }
