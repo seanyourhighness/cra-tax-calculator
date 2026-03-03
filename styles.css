@@ -1042,6 +1042,19 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-primary);
 }
 
+/* Margin Protection Slider Row */
+.mp-slider-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .mp-slider-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Margin Protection Badges */
 .mp-badge {
   display: inline-block;

@@ -954,7 +954,7 @@ document.addEventListener("DOMContentLoaded", () => {
     lastProtectionInputs = i;
 
     const results = calculateMarginProtection(i.lp, lastProtectionMargin, i.productKey, i.qty, i.thc, i.retMk, i.cogsOverride);
-    renderMarginProtection(results, lastProtectionMargin, i.lp, PRODUCT_TYPES[i.productKey], i.productKey, i.cogsOverride);
+    renderMarginProtection(results, lastProtectionMargin, i.lp, PRODUCT_TYPES[i.productKey], i.productKey, i.retMk, i.cogsOverride);
   });
 
   // 6. Scenario Simulator
@@ -1463,7 +1463,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ── Render Balanced Margin ──
-  function renderMarginProtection(results, targetMargin, baseLPCost, product, productKey, cogsOverride = null) {
+  function renderMarginProtection(results, targetMargin, baseLPCost, product, productKey, retailMarkupPct, cogsOverride = null) {
     const totalCount = results.length;
     const protectedCount = results.filter(r => r.marginStatus === 'protected').length;
     const atRiskCount = results.filter(r => r.marginStatus === 'at-risk').length;
@@ -1479,6 +1479,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Margin health color
     const marginHealthClass = avgMargin >= 0.55 ? 'kpi-good' : avgMargin >= 0.40 ? 'kpi-ok' : 'kpi-bad';
     const protectionClass = protectedCount === totalCount ? 'kpi-good' : protectedCount >= 10 ? 'kpi-ok' : 'kpi-bad';
+    const retPct = (retailMarkupPct * 100).toFixed(0);
 
     let html = `
       <h2>🛡️ Margin Protection — ${(targetMargin * 100).toFixed(0)}% Minimum ${cogsBadge(cogsOverride)}</h2>
@@ -1488,19 +1489,37 @@ document.addEventListener("DOMContentLoaded", () => {
         ${cogsOverride !== null ? 'COGS = <strong>' + fmt(cogsOverride) + '</strong> (actual).' : 'COGS assumed at <strong>50%</strong> of LP.'}
       </p>
 
-      <div class="balanced-slider-group">
-        <label>
-          Target Margin: <strong id="mpTargetLabel">${(targetMargin * 100).toFixed(0)}%</strong>
-        </label>
-        <input type="range" id="mpSlider"
-          min="20" max="70"
-          value="${(targetMargin * 100).toFixed(0)}" step="1">
-        <div class="slider-labels">
-          <span>20%</span>
-          <span class="balanced-preset" data-val="40">40% Safe</span>
-          <span class="balanced-preset" data-val="55">55% Target</span>
-          <span class="balanced-preset" data-val="60">60% Premium</span>
-          <span>70%</span>
+      <div class="mp-slider-row">
+        <div class="balanced-slider-group">
+          <label>
+            Target Margin: <strong id="mpTargetLabel">${(targetMargin * 100).toFixed(0)}%</strong>
+          </label>
+          <input type="range" id="mpSlider"
+            min="20" max="70"
+            value="${(targetMargin * 100).toFixed(0)}" step="1">
+          <div class="slider-labels">
+            <span>20%</span>
+            <span class="balanced-preset" data-val="40">40% Safe</span>
+            <span class="balanced-preset" data-val="55">55% Target</span>
+            <span class="balanced-preset" data-val="60">60% Premium</span>
+            <span>70%</span>
+          </div>
+        </div>
+
+        <div class="balanced-slider-group">
+          <label>
+            Retail Markup: <strong id="mpRetailLabel">${retPct}%</strong>
+          </label>
+          <input type="range" id="mpRetailSlider"
+            min="0" max="100"
+            value="${retPct}" step="1">
+          <div class="slider-labels">
+            <span>0%</span>
+            <span class="balanced-preset mp-retail-preset" data-val="30">Private 30%</span>
+            <span class="balanced-preset mp-retail-preset" data-val="35">Avg 35%</span>
+            <span class="balanced-preset mp-retail-preset" data-val="39">OCS 39%</span>
+            <span>100%</span>
+          </div>
         </div>
       </div>
 
@@ -1662,27 +1681,50 @@ document.addEventListener("DOMContentLoaded", () => {
     balancedPanel.scrollIntoView({ behavior: "smooth", block: "start" });
     showExportBtn();
 
-    // Wire up interactive slider
-    const slider = document.getElementById("mpSlider");
-    const label = document.getElementById("mpTargetLabel");
+    // Wire up interactive sliders
+    const marginSlider = document.getElementById("mpSlider");
+    const marginLabel = document.getElementById("mpTargetLabel");
+    const retailSliderMP = document.getElementById("mpRetailSlider");
+    const retailLabelMP = document.getElementById("mpRetailLabel");
 
-    slider.addEventListener("input", () => {
-      const newMargin = parseFloat(slider.value) / 100;
-      label.textContent = `${slider.value}%`;
+    function rerunProtection(newMargin, newRetail) {
       lastProtectionMargin = newMargin;
-
       if (lastProtectionInputs) {
         const i = lastProtectionInputs;
-        const newResults = calculateMarginProtection(i.lp, newMargin, i.productKey, i.qty, i.thc, i.retMk, i.cogsOverride);
-        renderMarginProtection(newResults, newMargin, i.lp, product, productKey, i.cogsOverride);
+        // Also sync the main page slider
+        retailSlider.value = (newRetail * 100).toFixed(0);
+        retailValueLabel.textContent = (newRetail * 100).toFixed(0) + '%';
+        i.retMk = newRetail;
+        const newResults = calculateMarginProtection(i.lp, newMargin, i.productKey, i.qty, i.thc, newRetail, i.cogsOverride);
+        renderMarginProtection(newResults, newMargin, i.lp, product, productKey, newRetail, i.cogsOverride);
       }
+    }
+
+    marginSlider.addEventListener("input", () => {
+      const newMargin = parseFloat(marginSlider.value) / 100;
+      marginLabel.textContent = `${marginSlider.value}%`;
+      rerunProtection(newMargin, retailMarkupPct);
     });
 
-    // Wire up presets
-    balancedPanel.querySelectorAll('.balanced-preset').forEach(el => {
+    retailSliderMP.addEventListener("input", () => {
+      const newRetail = parseFloat(retailSliderMP.value) / 100;
+      retailLabelMP.textContent = `${retailSliderMP.value}%`;
+      rerunProtection(lastProtectionMargin, newRetail);
+    });
+
+    // Wire up presets (margin)
+    balancedPanel.querySelectorAll('.balanced-preset:not(.mp-retail-preset)').forEach(el => {
       el.addEventListener('click', () => {
-        slider.value = el.dataset.val;
-        slider.dispatchEvent(new Event('input'));
+        marginSlider.value = el.dataset.val;
+        marginSlider.dispatchEvent(new Event('input'));
+      });
+    });
+
+    // Wire up presets (retail)
+    balancedPanel.querySelectorAll('.mp-retail-preset').forEach(el => {
+      el.addEventListener('click', () => {
+        retailSliderMP.value = el.dataset.val;
+        retailSliderMP.dispatchEvent(new Event('input'));
       });
     });
   }
