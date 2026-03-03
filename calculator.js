@@ -470,13 +470,14 @@ function calculateAllProvinces(productTypeKey, quantity, thcMg, lpCost, retailMa
 
 /**
  * Calculates cost & margin analysis across all provinces.
- * Assumes COGS = costMarginPct × LP Cost (default 50%).
+ * When cogsOverride is provided (a dollar amount), it's used directly.
+ * Otherwise falls back to COGS = costMarginPct × LP Cost (default 50%).
  * Excise is paid upfront (out of pocket).
  * Shows: COGS, excise, total out-of-pocket, LP revenue, net profit, true margin.
  */
-function calculateMarginAnalysis(productTypeKey, quantity, thcMg, lpCost, retailMarkupPct, costMarginPct = 0.50) {
+function calculateMarginAnalysis(productTypeKey, quantity, thcMg, lpCost, retailMarkupPct, costMarginPct = 0.50, cogsOverride = null) {
   const results = [];
-  const cogs = lpCost * costMarginPct; // Cost of goods sold
+  const cogs = cogsOverride !== null ? cogsOverride : lpCost * costMarginPct;
 
   for (const provKey of Object.keys(PROVINCES)) {
     const r = calculate(productTypeKey, provKey, quantity, thcMg, lpCost, retailMarkupPct);
@@ -516,8 +517,9 @@ function calculateMarginAnalysis(productTypeKey, quantity, thcMg, lpCost, retail
  * Price Equalizer: find the LP cost per province that achieves a uniform shelf price.
  * The user's base LP cost is the floor — we never charge less.
  * For provinces where the target is below their natural shelf price, they keep their natural price.
+ * When cogsOverride is provided (a dollar amount), it's used directly.
  */
-function calculateUniformPricing(baseLPCost, targetShelfPrice, productTypeKey, quantity, thcMg, retailMarkupPct) {
+function calculateUniformPricing(baseLPCost, targetShelfPrice, productTypeKey, quantity, thcMg, retailMarkupPct, cogsOverride = null) {
   const results = [];
 
   for (const provKey of Object.keys(PROVINCES)) {
@@ -544,7 +546,7 @@ function calculateUniformPricing(baseLPCost, targetShelfPrice, productTypeKey, q
     }
     // If naturalShelf > targetShelfPrice: province is too expensive, LP stays at base
 
-    const cogs = adjustedLP * 0.50;
+    const cogs = cogsOverride !== null ? cogsOverride : adjustedLP * 0.50;
     const adjustedCalc = calculate(productTypeKey, provKey, quantity, thcMg, adjustedLP, retailMarkupPct);
     const excise = adjustedCalc ? adjustedCalc.totalExciseDuty : 0;
     const landed = adjustedCalc ? adjustedCalc.landedCost : 0;
@@ -585,6 +587,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const quantityInput = document.getElementById("quantity");
   const thcInput = document.getElementById("thcMg");
   const lpCostInput = document.getElementById("lpCost");
+  const trueCogsInput = document.getElementById("trueCogs");
   const retailSlider = document.getElementById("retailMarkup");
   const retailValueLabel = document.getElementById("retailMarkupValue");
   const thcGroup = document.getElementById("thcGroup");
@@ -728,14 +731,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Helper to extract inputs
   function getInputs() {
+    const cogsRaw = trueCogsInput.value.trim();
     return {
       productKey: productSelect.value,
       provinceKey: provinceSelect.value,
       qty: parseFloat(quantityInput.value) || 0,
       thc: parseFloat(thcInput.value) || 0,
       lp: parseFloat(lpCostInput.value) || 0,
-      retMk: parseFloat(retailSlider.value) / 100
+      retMk: parseFloat(retailSlider.value) / 100,
+      cogsOverride: cogsRaw !== '' ? parseFloat(cogsRaw) : null
     };
+  }
+
+  // COGS helpers
+  function getCogsValue(lp, cogsOverride) {
+    return cogsOverride !== null ? cogsOverride : lp * 0.50;
+  }
+  function cogsLabel(cogsOverride) {
+    return cogsOverride !== null ? 'COGS (actual)' : 'COGS (est. 50%)';
+  }
+  function cogsBadge(cogsOverride) {
+    return cogsOverride !== null
+      ? '<span class="cogs-indicator cogs-actual">Actual</span>'
+      : '<span class="cogs-indicator cogs-estimated">Est.</span>';
+  }
+  function cogsAssumptionText(cogsOverride) {
+    return cogsOverride !== null ? 'actual COGS' : 'assuming 50% COGS';
   }
 
   function validateBasic(i) {
@@ -810,8 +831,8 @@ document.addEventListener("DOMContentLoaded", () => {
     resultsPanel.classList.remove("visible");
     hideAllPanels();
 
-    const marginResults = calculateMarginAnalysis(i.productKey, i.qty, i.thc, i.lp, i.retMk);
-    renderMarginAnalysis(marginResults, i.lp, PRODUCT_TYPES[i.productKey]);
+    const marginResults = calculateMarginAnalysis(i.productKey, i.qty, i.thc, i.lp, i.retMk, 0.50, i.cogsOverride);
+    renderMarginAnalysis(marginResults, i.lp, PRODUCT_TYPES[i.productKey], i.cogsOverride);
   });
 
   // 5. Price Equalizer (Uniform Shelf Pricing)
@@ -832,9 +853,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Default target = highest natural shelf price (achievable for all)
     const targetShelf = maxShelf;
-    const results = calculateUniformPricing(i.lp, targetShelf, i.productKey, i.qty, i.thc, i.retMk);
+    const results = calculateUniformPricing(i.lp, targetShelf, i.productKey, i.qty, i.thc, i.retMk, i.cogsOverride);
     const naturalMin = Math.min(...allNatural.map(r => r.consumerPrice));
-    renderPriceEqualizer(results, targetShelf, i.lp, naturalMin, maxShelf, PRODUCT_TYPES[i.productKey]);
+    renderPriceEqualizer(results, targetShelf, i.lp, naturalMin, maxShelf, PRODUCT_TYPES[i.productKey], i.cogsOverride);
   });
 
   // 6. Scenario Simulator
@@ -859,8 +880,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const b = resultsB[idx];
       if (!a || !b) continue;
 
-      const cogsA = paramsA.lp * paramsA.cogsPct;
-      const cogsB = paramsB.lp * paramsB.cogsPct;
+      const cogsA = paramsA.cogsOverride !== null ? paramsA.cogsOverride : paramsA.lp * paramsA.cogsPct;
+      const cogsB = paramsB.cogsOverride !== null && paramsB.cogsOverride !== undefined ? paramsB.cogsOverride : paramsB.lp * paramsB.cogsPct;
       const marginA = paramsA.lp > 0 ? (paramsA.lp - cogsA - a.totalExciseDuty) / paramsA.lp : 0;
       const marginB = paramsB.lp > 0 ? (paramsB.lp - cogsB - b.totalExciseDuty) / paramsB.lp : 0;
 
@@ -897,7 +918,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="sc-field"><label>Quantity</label><span class="sc-val">${baseInputs.qty} ${product.unitLabel}</span></div>
           <div class="sc-field"><label>LP Cost</label><span class="sc-val">$${baseInputs.lp.toFixed(2)}</span></div>
           <div class="sc-field"><label>Retail Markup</label><span class="sc-val">${(baseInputs.retMk * 100).toFixed(0)}%</span></div>
-          <div class="sc-field"><label>COGS</label><span class="sc-val">50%</span></div>
+          <div class="sc-field"><label>COGS</label><span class="sc-val">${baseInputs.cogsOverride !== null ? '$' + baseInputs.cogsOverride.toFixed(2) + ' (actual)' : '50% (est.)'}</span></div>
         </div>
         <div class="scenario-col scenario-b">
           <h3>🔴 Scenario B — Modified</h3>
@@ -905,7 +926,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="sc-field"><label>Quantity</label><span class="sc-val">${baseInputs.qty} ${product.unitLabel}</span></div>
           <div class="sc-field"><label>LP Cost</label><input type="number" id="scLpCost" value="${baseInputs.lp.toFixed(2)}" step="0.50" min="0"></div>
           <div class="sc-field"><label>Retail Markup</label><input type="number" id="scRetailMk" value="${(baseInputs.retMk * 100).toFixed(0)}" step="1" min="0" max="100" style="width:60px">%</div>
-          <div class="sc-field"><label>COGS</label><input type="number" id="scCogs" value="50" step="1" min="0" max="100" style="width:60px">%</div>
+          <div class="sc-field"><label>COGS ($)</label><input type="number" id="scCogsDollar" value="${baseInputs.cogsOverride !== null ? baseInputs.cogsOverride.toFixed(2) : ''}" placeholder="${(baseInputs.lp * 0.50).toFixed(2)}" step="0.50" min="0" style="width:80px"></div>
         </div>
       </div>
 
@@ -918,11 +939,11 @@ document.addEventListener("DOMContentLoaded", () => {
     showExportBtn();
 
     // Initial render
-    const paramsA = { ...baseInputs, cogsPct: 0.50 };
+    const paramsA = { ...baseInputs, cogsPct: 0.50, cogsOverride: baseInputs.cogsOverride };
     updateScenarioTable(paramsA, baseInputs);
 
     // Wire up live recalculation
-    ["scLpCost", "scRetailMk", "scCogs"].forEach(id => {
+    ["scLpCost", "scRetailMk", "scCogsDollar"].forEach(id => {
       document.getElementById(id).addEventListener("input", () => {
         updateScenarioTable(paramsA, baseInputs);
       });
@@ -932,13 +953,15 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateScenarioTable(paramsA, baseInputs) {
     const lpB = parseFloat(document.getElementById("scLpCost").value) || paramsA.lp;
     const retMkB = (parseFloat(document.getElementById("scRetailMk").value) || 39) / 100;
-    const cogsB = (parseFloat(document.getElementById("scCogs").value) || 50) / 100;
+    const cogsDollarRaw = document.getElementById("scCogsDollar").value.trim();
+    const cogsBOverride = cogsDollarRaw !== '' ? parseFloat(cogsDollarRaw) : null;
 
     const paramsB = {
       ...baseInputs,
       lp: lpB,
       retMk: retMkB,
-      cogsPct: cogsB
+      cogsPct: 0.50,
+      cogsOverride: cogsBOverride
     };
 
     const comparison = runScenarioComparison(paramsA, paramsB);
@@ -1134,10 +1157,12 @@ document.addEventListener("DOMContentLoaded", () => {
     html += `</div>`; // close pipeline
 
     // ── Summary Cards ──
-    const cogs = r.lpCost * 0.50;
+    const i = getInputs();
+    const cogs = getCogsValue(r.lpCost, i.cogsOverride);
     const totalOOP = cogs + r.totalExciseDuty;
     const netProfit = r.lpCost - totalOOP;
     const trueMargin = r.lpCost > 0 ? netProfit / r.lpCost : 0;
+    const preExciseMargin = r.lpCost > 0 ? (r.lpCost - cogs) / r.lpCost : 0;
 
     html += `
       <div class="summary-grid">
@@ -1164,12 +1189,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // ── LP Margin Cards ──
     html += `
       <div class="margin-summary">
-        <h3>💰 Your Margin Breakdown <span class="margin-assumption">(assuming 50% COGS)</span></h3>
+        <h3>💰 Your Margin Breakdown <span class="margin-assumption">(${cogsAssumptionText(i.cogsOverride)})</span> ${cogsBadge(i.cogsOverride)}</h3>
         <div class="summary-grid">
           <div class="summary-card">
-            <div class="sc-label">COGS (50%)</div>
+            <div class="sc-label">${cogsLabel(i.cogsOverride)}</div>
             <div class="sc-value">${fmt(cogs)}</div>
-            <div class="sc-sub">Production cost</div>
+            <div class="sc-sub">${i.cogsOverride !== null ? 'Your actual cost' : 'Production cost (est.)'}</div>
           </div>
           <div class="summary-card">
             <div class="sc-label">Out-of-Pocket</div>
@@ -1222,8 +1247,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const provName = PROVINCES[Object.keys(PROVINCES).find(k => PROVINCES[k].name === r.province)].flag + " " + r.province;
 
-      // Margin calculation (50% COGS assumption)
-      const cogs = r.lpCost * 0.50;
+      // Margin calculation — use true COGS if provided
+      const mI = getInputs();
+      const cogs = getCogsValue(r.lpCost, mI.cogsOverride);
       const excise = r.totalExciseDuty;
       const netProfit = r.lpCost - cogs - excise;
       const trueMargin = r.lpCost > 0 ? netProfit / r.lpCost : 0;
@@ -1248,18 +1274,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ── Render Margin Analysis ──
-  function renderMarginAnalysis(results, lpCost, product) {
-    const cogs = lpCost * 0.50;
+  function renderMarginAnalysis(results, lpCost, product, cogsOverride = null) {
+    const cogs = getCogsValue(lpCost, cogsOverride);
+    const preExciseMargin = lpCost > 0 ? (lpCost - cogs) / lpCost : 0;
 
     // Find best/worst for highlighting
     const bestProfit = Math.max(...results.map(r => r.netProfit));
     const worstProfit = Math.min(...results.map(r => r.netProfit));
 
     let html = `
-      <h2>💰 Cost & Margin Analysis</h2>
+      <h2>💰 Cost & Margin Analysis ${cogsBadge(cogsOverride)}</h2>
       <p class="margin-intro">
-        Real profitability across all provinces. COGS assumed at <strong>50%</strong> of LP Cost
-        (<strong>${fmt(cogs)}</strong>). Excise is paid <strong>upfront</strong> before product reaches distributor.
+        Real profitability across all provinces. COGS ${cogsOverride !== null ? 'set to <strong>' + fmt(cogsOverride) + '</strong> (actual)' : 'assumed at <strong>50%</strong> of LP Cost (<strong>' + fmt(cogs) + '</strong>)'}.
+        Excise is paid <strong>upfront</strong> before product reaches distributor.
       </p>
 
       <div class="margin-kpi-strip">
@@ -1268,12 +1295,12 @@ document.addEventListener("DOMContentLoaded", () => {
           <span class="kpi-value">${fmt(lpCost)}</span>
         </div>
         <div class="kpi">
-          <span class="kpi-label">COGS (50%)</span>
+          <span class="kpi-label">${cogsLabel(cogsOverride)}</span>
           <span class="kpi-value">${fmt(cogs)}</span>
         </div>
         <div class="kpi">
           <span class="kpi-label">Pre-Excise Margin</span>
-          <span class="kpi-value kpi-good">50.0%</span>
+          <span class="kpi-value kpi-good">${pct(preExciseMargin)}</span>
         </div>
         <div class="kpi">
           <span class="kpi-label">Best Province Margin</span>
@@ -1326,7 +1353,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       <div class="margin-footnote">
         <p>📊 Sorted by net profit (highest first). Out-of-pocket = COGS + Excise (paid upfront before distributor payment).</p>
-        <p>True Margin = (LP Revenue − Out-of-Pocket) ÷ LP Revenue. Pre-excise margin is 50% by assumption.</p>
+        <p>True Margin = (LP Revenue − Out-of-Pocket) ÷ LP Revenue. ${cogsOverride !== null ? 'COGS based on your actual input.' : 'Pre-excise margin is 50% by assumption.'}</p>
       </div>
     `;
 
@@ -1337,7 +1364,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ── Render Balanced Margin ──
-  function renderPriceEqualizer(results, targetShelf, baseLPCost, naturalMin, naturalMax, product) {
+  function renderPriceEqualizer(results, targetShelf, baseLPCost, naturalMin, naturalMax, product, cogsOverride = null) {
     const matchCount = results.filter(r => r.matchesTarget).length;
     const totalCount = results.length;
     const avgLP = results.reduce((sum, r) => sum + r.adjustedLP, 0) / totalCount;
@@ -1346,11 +1373,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const worstMargin = Math.min(...results.map(r => r.trueMargin));
 
     let html = `
-      <h2>⚖️ Price Equalizer — Uniform Shelf Pricing</h2>
+      <h2>⚖️ Price Equalizer — Uniform Shelf Pricing ${cogsBadge(cogsOverride)}</h2>
       <p class="margin-intro">
         Adjust each province's LP price to achieve a <strong>uniform consumer shelf price</strong>.
         Your base LP of <strong>${fmt(baseLPCost)}</strong> is the floor — no province goes below it.
-        COGS assumed at <strong>50%</strong>.
+        ${cogsOverride !== null ? 'COGS = <strong>' + fmt(cogsOverride) + '</strong> (actual).' : 'COGS assumed at <strong>50%</strong>.'}
       </p>
 
       <div class="balanced-slider-group">
@@ -1455,8 +1482,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (lastEqualizerInputs) {
         const i = lastEqualizerInputs;
-        const newResults = calculateUniformPricing(i.lp, newTarget, i.productKey, i.qty, i.thc, i.retMk);
-        renderPriceEqualizer(newResults, newTarget, baseLPCost, naturalMin, naturalMax, product);
+        const newResults = calculateUniformPricing(i.lp, newTarget, i.productKey, i.qty, i.thc, i.retMk, cogsOverride);
+        renderPriceEqualizer(newResults, newTarget, baseLPCost, naturalMin, naturalMax, product, cogsOverride);
       }
     });
 

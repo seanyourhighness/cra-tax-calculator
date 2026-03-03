@@ -196,6 +196,54 @@ body::before {
   font-style: italic;
 }
 
+/* COGS Input Field */
+.cogs-field {
+  position: relative;
+}
+
+.cogs-field input[type="number"] {
+  border-left: 3px solid var(--accent-amber);
+}
+
+.cogs-field input[type="number"]:focus {
+  border-left-color: var(--accent-amber);
+}
+
+.optional-badge {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-amber);
+  border-radius: 999px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: 0.3rem;
+}
+
+.cogs-indicator {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: 0.3rem;
+}
+
+.cogs-actual {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-emerald);
+}
+
+.cogs-estimated {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+}
+
 .form-group select,
 .form-group input[type="number"] {
   font-family: 'Inter', sans-serif;
