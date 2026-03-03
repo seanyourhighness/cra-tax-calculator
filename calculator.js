@@ -1535,7 +1535,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <th>Min LP</th>
               <th>Rec. LP</th>
               <th>Excise</th>
-              <th>Excise %</th>
+              <th>Excise/LP</th>
               <th>Cash Outlay</th>
               <th>Net Profit</th>
               <th>Margin</th>
