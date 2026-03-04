@@ -69,8 +69,17 @@
             const row = document.createElement("div");
             row.className = "pc-comp-row";
             row.innerHTML = `
-        <input type="text" class="pc-comp-brand" placeholder="e.g. Pure Sunfarms Pink Kush" 
-               value="${comp.brand}" data-idx="${idx}">
+        <div class="pc-comp-brand-cell" style="display: flex; flex-direction: column;">
+            <input type="text" class="pc-comp-brand" placeholder="e.g. Pure Sunfarms Pink Kush" 
+                   value="${comp.brand}" data-idx="${idx}">
+            ${(comp.strain || comp.size || comp.formFactor || comp.isSale) ? `
+            <div style="font-size: 10px; color: #94a3b8; margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
+                ${comp.strain && comp.strain !== comp.brand ? `<span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">🌿 ${comp.strain}</span>` : ''}
+                ${comp.formFactor && comp.formFactor !== 'Unknown' ? `<span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">📦 ${comp.formFactor}</span>` : ''}
+                ${comp.size && comp.size !== 'Unknown' ? `<span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">⚖️ ${comp.size}</span>` : ''}
+                ${comp.isSale ? `<span style="background: rgba(239,68,68,0.15); color: #fca5a5; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid rgba(239,68,68,0.3);">⚠️ SALE / CLEARANCE</span>` : ''}
+            </div>` : ''}
+        </div>
         <input type="number" class="pc-comp-price" placeholder="$0.00" min="0" step="0.01" 
                value="${comp.price}" data-idx="${idx}">
         <select class="pc-comp-source" data-idx="${idx}">
@@ -287,7 +296,11 @@
                     // Populate competitors array with top results
                     // We only take the top 10 to fit the UI limits
                     competitors = data.products.slice(0, 10).map(p => ({
-                        brand: p.name, // Display the product strain/name in the brand column
+                        brand: p.name, // Display the product strain/name in the main column
+                        strain: p.strain || '',
+                        formFactor: p.formFactor || '',
+                        size: p.size || '',
+                        isSale: p.isSale || false,
                         price: p.price.toFixed(2),
                         source: "hibuddy.ca"
                     }));
@@ -306,6 +319,91 @@
                 btn.disabled = false;
                 loading.style.display = "none";
             }
+        });
+
+        // Generate Pitch Report (PDF Export)
+        document.getElementById("pcExportPdfBtn").addEventListener("click", () => {
+            const btn = document.getElementById("pcExportPdfBtn");
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "⏳ Generating PDF...";
+            btn.disabled = true;
+
+            // Target the entire Price Comparison page
+            const source = document.querySelector(".pc-page");
+            if (!source) return;
+
+            // Build a clean wrapper for printing
+            const wrapper = document.createElement("div");
+            wrapper.style.cssText = "padding:32px; font-family: 'Poppins', sans-serif; color:#1e293b; background:#fff;";
+
+            // Get current setup details
+            const productName = document.getElementById("pcProductName").value || "Cannabis Product";
+            const category = document.getElementById("pcCategory").options[document.getElementById("pcCategory").selectedIndex].text;
+            const weight = document.getElementById("pcWeight").value || "-";
+            const yourPrice = parseFloat(document.getElementById("pcYourPrice").value) || 0;
+            const dateStr = new Date().toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
+
+            // Create professional header
+            wrapper.innerHTML = `
+              <div style="border-bottom: 3px solid #10b981; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                  <h1 style="margin: 0; font-size: 28px; color: #10b981; font-weight: 700;">Retail Market Analysis</h1>
+                  <h2 style="margin: 8px 0 0; font-size: 18px; color: #334155;">${productName}</h2>
+                </div>
+                <div style="text-align: right;">
+                  <p style="margin: 0; font-size: 14px; color: #64748b; font-weight: 600;">${category} • ${weight}</p>
+                  <p style="margin: 4px 0 0; font-size: 14px; color: #64748b;">Target MSRP: $${yourPrice.toFixed(2)}</p>
+                  <p style="margin: 4px 0 0; font-size: 12px; color: #94a3b8;">${dateStr}</p>
+                </div>
+              </div>
+            `;
+
+            // Clone the actual UI content
+            const clone = source.cloneNode(true);
+
+            // Cleanup UI elements that shouldn't be printed
+            const elementsToRemove = clone.querySelectorAll('.pc-export-btn, .pc-add-btn, .pc-remove-btn, .pc-auto-fill-group');
+            elementsToRemove.forEach(el => el.remove());
+
+            // Fix input fields to appear as static text for the PDF
+            clone.querySelectorAll('input, select').forEach(input => {
+                const val = input.value || input.options?.[input.selectedIndex]?.text || '';
+                const span = document.createElement('span');
+                span.textContent = val;
+                span.style.cssText = "display: inline-block; padding: 4px 8px; font-weight: 600; color: #0f172a;";
+                input.parentNode.replaceChild(span, input);
+            });
+
+            // Ensure chart renders properly (convert height mapping)
+            clone.querySelectorAll('.pc-chart-bar-fill').forEach(bar => {
+                // Ensure percentage heights are inline so html2canvas picks them up
+                bar.style.height = bar.style.height;
+            });
+
+            wrapper.appendChild(clone);
+
+            // Add Footer
+            const footer = document.createElement("div");
+            footer.style.cssText = "margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center;";
+            footer.innerHTML = "Generated via <strong>Cannabis Pricing & Strategy Engine</strong> • Prices sourced real-time from compiled retail data.";
+            wrapper.appendChild(footer);
+
+            const filename = `Pitch_Report_${productName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+            html2pdf().set({
+                margin: [10, 10, 10, 10],
+                filename,
+                image: { type: "jpeg", quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 1200 },
+                jsPDF: { unit: "mm", format: "letter", orientation: "portrait" }
+            }).from(wrapper).save().then(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }).catch(err => {
+                console.error("PDF Gen Error", err);
+                btn.innerHTML = "❌ Export Failed";
+                setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 3000);
+            });
         });
 
         // Save your product on change

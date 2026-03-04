@@ -20,6 +20,6 @@
   "homepage": "https://github.com/seanyourhighness/CRA-Tax-Calculator#readme",
   "dependencies": {
     "@sparticuz/chromium": "^143.0.4",
-    "puppeteer-core": "^24.37.5"
+    "puppeteer-core": "^24.38.0"
   }
 }

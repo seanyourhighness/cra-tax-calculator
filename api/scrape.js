@@ -106,9 +106,12 @@ module.exports = async function handler(req, res) {
                             // GraphQL returns products with this shape, flatten them
                             products = json.data.products.map(p => ({
                                 brand: p.brand || brand,
-                                name: p.name || p.strain || 'Unknown Product',
-                                price: p.price ? (p.price.price || p.price.minPrice) : 0,
-                                size: p.size || '3.5g',
+                                name: p.name || p.strain || p.prodname || 'Unknown Product',
+                                strain: p.prodname || p.strain || p.name || '',
+                                formFactor: p.category2 || p.category1 || 'Unknown',
+                                price: p.price ? (p.price.price || p.price.minPrice || p.price) : 0,
+                                size: p.size || (p.availsize && p.availsize[0]) || '3.5g',
+                                isSale: p.badge === 'S' || p.badge === 'SALE' || p.isSale === true,
                                 source: 'hibuddy.ca'
                             }));
                         }
@@ -149,6 +152,8 @@ module.exports = async function handler(req, res) {
                             let inferredSize = '';
                             let parsedPrice = parseFloat(match[1]);
 
+                            let isSale = false;
+
                             // Try to smartly guess lines based on length/content
                             if (lines[0].toUpperCase() === lines[0]) {
                                 inferredBrand = lines[0]; // All caps is usually the brand
@@ -164,11 +169,19 @@ module.exports = async function handler(req, res) {
                                 inferredSize = '';
                             }
 
+                            // Check for sale or deal text in the card's text
+                            if (text.toLowerCase().includes('sale') || text.toLowerCase().includes('clearance') || text.includes('%')) {
+                                isSale = true;
+                            }
+
                             results.push({
                                 brand: inferredBrand,
                                 name: inferredName,
+                                strain: inferredName, // Best guess for strain is the product name
+                                formFactor: 'Unknown', // Hard to precisely guess from list view
                                 price: parsedPrice,
                                 size: inferredSize || 'Unknown',
+                                isSale: isSale,
                                 source: 'hibuddy.ca / ' + inferredBrand
                             });
                         }
