@@ -150,7 +150,7 @@
         <!-- Your Product Setup -->
         <div class="pc-section pc-your-product">
           <h2>📦 Your Product</h2>
-          <div class="pc-form-grid">
+          <div class="pc-form-grid" style="grid-template-columns: repeat(3, 1fr);">
             <div class="pc-field">
               <label for="pcProductName">Product Name / SKU</label>
               <input type="text" id="pcProductName" placeholder="e.g. Tribal Cuban Linx 3.5g">
@@ -173,6 +173,20 @@
               <label for="pcYourPrice">Your Shelf Price (Pre-Tax)</label>
               <input type="number" id="pcYourPrice" placeholder="e.g. 29.99" min="0" step="0.01">
             </div>
+            <div class="pc-field">
+              <label for="pcQualityTier">Quality Tier</label>
+              <select id="pcQualityTier">
+                <option value="premium" selected>Premium ($30–$50)</option>
+                <option value="ultra_premium">Ultra-Premium ($50+)</option>
+                <option value="mid">Mid-Range ($20–$30)</option>
+                <option value="budget">Budget ($10–$20)</option>
+                <option value="all">All Tiers (no filter)</option>
+              </select>
+            </div>
+            <div class="pc-field">
+              <label for="pcMinTHC">Minimum THC %</label>
+              <input type="number" id="pcMinTHC" placeholder="e.g. 20" min="0" max="40" step="1">
+            </div>
           </div>
         </div>
 
@@ -181,7 +195,7 @@
           <div class="pc-section-header">
             <h2>🏷️ Competitor Prices</h2>
             <div class="pc-header-actions">
-              <div class="pc-auto-fill-group">
+              <div class="pc-auto-fill-group" style="flex-wrap: wrap; gap: 6px;">
                 <select id="pcScrapeProvince" class="pc-search-input" style="width: auto;">
                   <option value="ON">Ontario</option>
                   <option value="AB">Alberta</option>
@@ -189,31 +203,33 @@
                   <option value="MB">Manitoba</option>
                   <option value="SK">Saskatchewan</option>
                 </select>
-                <input type="text" id="pcAutoSearch" placeholder="Auto-fill by Brand (e.g. TRIBAL)"
+                <input type="text" id="pcAutoSearch" placeholder="Search by Brand (e.g. TRIBAL)"
                   class="pc-search-input">
                 <button id="pcAutoSearchBtn" class="pc-search-btn">Fetch Prices ⚡</button>
+                <button id="pcDiscoverBtn" class="pc-search-btn"
+                  style="background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none;"
+                  title="Auto-discover competitors in the same category and size range">🔍 Discover Competitors</button>
               </div>
-              <button id="pcAddCompetitor" class="pc-add-btn">+ Add Row</button>
             </div>
           </div>
-          <p class="pc-hint">Enter competitor products at the same size/weight for accurate comparison. Or search above
-            to auto-fill top results from <a href="https://hibuddy.ca" target="_blank" rel="noopener">hibuddy.ca</a>.
+          <p class="pc-hint">Search a brand or discover competitors in your category to launch the market intelligence
+            engine. Data sourced from <a href="https://hibuddy.ca" target="_blank" rel="noopener">hibuddy.ca</a>.
           </p>
 
           <div id="pcLoadingState" class="pc-loading-state" style="display: none;">
             <div class="pc-spinner"></div>
-            <span>Fetching live Ontario pricing from hibuddy for <strong id="pcSearchTermDisplay"></strong>... This
+            <span>Fetching live pricing from hibuddy for <strong id="pcSearchTermDisplay"></strong>... This
               takes ~5-10 seconds.</span>
           </div>
 
-          <div class="pc-comp-table">
-            <div class="pc-comp-header">
-              <span>Brand / Product</span>
-              <span>Shelf Price</span>
-              <span>Source</span>
-              <span></span>
-            </div>
-            <div id="pcCompetitorRows"></div>
+          <!-- LEVEL 1: Market Overview — Product Card Grid -->
+          <div id="pcMarketCards" class="ci-market-cards"></div>
+
+          <!-- LEVEL 2: Price War Scatter Plot -->
+          <div class="ci-scatter-section" id="pcScatterSection">
+            <h3>📊 Price War View <span style="font-weight: 400; font-size: 12px; color: #64748b;">— THC% vs Lowest
+                Price</span></h3>
+            <div id="pcScatterPlot" class="ci-scatter-container" style="position: relative;"></div>
           </div>
         </div>
 

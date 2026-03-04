@@ -1,6 +1,52 @@
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 
+// ─── UTILITIES ───────────────────────────────────────────────
+
+// Parse hibuddy size strings like "3.5g", "10x0.35g", "30ml", "1oz" → { totalGrams, display, isMultipack }
+function parseWeight(sizeStr) {
+    if (!sizeStr || sizeStr === 'Unknown') return { totalGrams: 0, display: sizeStr || '?', isMultipack: false, units: 1 };
+    const s = sizeStr.trim();
+    // Multipack: "10x0.35g" or "3x0.5g"
+    const multi = s.match(/(\d+)\s*x\s*([\d.]+)\s*(g|ml)/i);
+    if (multi) {
+        const units = parseInt(multi[1]);
+        const per = parseFloat(multi[2]);
+        return { totalGrams: units * per, display: s, isMultipack: true, units };
+    }
+    // Standard: "3.5g", "28g", "30ml"
+    const std = s.match(/^([\d.]+)\s*(g|ml|oz)$/i);
+    if (std) {
+        let grams = parseFloat(std[1]);
+        if (std[2].toLowerCase() === 'oz') grams *= 28;
+        return { totalGrams: grams, display: s, isMultipack: false, units: 1 };
+    }
+    return { totalGrams: 0, display: s, isMultipack: false, units: 1 };
+}
+
+// Retailer tier classification
+const DISCOUNT_CHAINS = ['value buds', 'canna cabana', 'sessions', 'fire & flower', 'fire and flower', 'one plant', 'tokyo smoke', 'spiritleaf', 'superette', 'dutch love', 'hobo', 'meta cannabis', 'tweed', 'shinny', 'j. supply co'];
+const GOVT_STORES = ['ontario cannabis store', 'ocs', 'sqdc', 'bc cannabis store', 'aglc', 'cannabis nb', 'nslc', 'nblc', 'pei cannabis', 'yukon liquor', 'cannabis yukon'];
+
+function tagRetailerTier(storeName) {
+    const lower = (storeName || '').toLowerCase();
+    if (DISCOUNT_CHAINS.some(d => lower.includes(d))) return 'DISCOUNT';
+    if (GOVT_STORES.some(g => lower.includes(g))) return 'GOVERNMENT';
+    return 'STANDARD';
+}
+
+// Extract terpenes and quality flags from product description
+const TERPENES = ['myrcene', 'limonene', 'caryophyllene', 'pinene', 'linalool', 'humulene', 'terpinolene', 'ocimene', 'bisabolol', 'guaiol', 'nerolidol', 'valencene'];
+const QUALITY_FLAGS = ['live rosin', 'live resin', 'diamond infused', 'diamond-infused', 'full spectrum', 'cold cured', 'ice water hash', 'solventless', 'organic', 'hand-trimmed', 'hand trimmed', 'small batch', 'craft', 'indica', 'sativa', 'hybrid'];
+
+function extractQualitative(descr) {
+    if (!descr) return { terpenes: [], qualityFlags: [] };
+    const lower = descr.toLowerCase();
+    const terpenes = TERPENES.filter(t => lower.includes(t));
+    const qualityFlags = QUALITY_FLAGS.filter(f => lower.includes(f));
+    return { terpenes, qualityFlags };
+}
+
 module.exports = async function handler(req, res) {
     // CORS Headers
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -16,7 +62,13 @@ module.exports = async function handler(req, res) {
         return;
     }
 
-    const { brand, province, size } = req.query;
+    const { brand, province, size, mode, productId } = req.query;
+
+    // ─── MODE: DETAIL — Per-store pricing for a specific product ───
+    if (mode === 'detail' && productId) {
+        return handleDetailMode(req, res, productId, size, province);
+    }
+
     if (!brand) {
         return res.status(400).json({ error: 'Missing brand parameter' });
     }
@@ -95,26 +147,66 @@ module.exports = async function handler(req, res) {
 
         let products = [];
 
-        // Listen for GraphQL product response
+        // Listen for GraphQL responses — target meiliSearch (the actual search results)
         page.on('response', async (response) => {
             if (response.url().includes('graphql') && response.request().method() === 'POST') {
                 try {
-                    const postData = response.request().postData();
-                    if (postData && postData.includes('main_page_query')) {
-                        const json = await response.json();
-                        if (json.data && json.data.products) {
-                            // GraphQL returns products with this shape, flatten them
-                            products = json.data.products.map(p => ({
-                                brand: p.brand || brand,
-                                name: p.name || p.strain || p.prodname || 'Unknown Product',
-                                strain: p.prodname || p.strain || p.name || '',
+                    const json = await response.json();
+                    if (json.data && json.data.meiliSearch && products.length === 0) {
+                        // meiliSearch = the real brand-filtered search results (up to 100 items)
+                        products = json.data.meiliSearch.map(p => {
+                            // Entity resolution: brand vs product
+                            const brandName = (p.brand || brand).trim();
+                            const productName = (p.prodname || 'Unknown Product').trim();
+
+                            // Weight normalization & PPG
+                            const allSizes = Array.isArray(p.availsize) ? p.availsize : [];
+                            const primarySize = allSizes[0] || 'Unknown';
+                            const parsed = parseWeight(primarySize);
+                            const price = typeof p.price === 'number' ? p.price : 0;
+                            const ppg = parsed.totalGrams > 0 ? +(price / parsed.totalGrams).toFixed(2) : (p.availppg || 0);
+
+                            // THC/CBD potency (Health Canada ranges)
+                            const thcMin = typeof p.thcmin === 'number' ? p.thcmin : 0;
+                            const thcMax = typeof p.thcmax === 'number' ? p.thcmax : 0;
+                            const cbdMin = typeof p.cbdmin === 'number' ? p.cbdmin : 0;
+                            const cbdMax = typeof p.cbdmax === 'number' ? p.cbdmax : 0;
+                            const thcMedian = thcMin || thcMax ? +((thcMin + thcMax) / 2).toFixed(1) : 0;
+                            const cbdMedian = cbdMin || cbdMax ? +((cbdMin + cbdMax) / 2).toFixed(1) : 0;
+
+                            // Edible cap logic: 10mg THC per package (federal limit)
+                            const isEdible = (p.category1 || '').toLowerCase() === 'edibles';
+                            const pricePerMgTHC = isEdible && thcMedian > 0 ? +(price / 10).toFixed(2) : null;
+
+                            return {
+                                productId: p._id || p.id || '',
+                                brandName,
+                                productName,
+                                brand: `${brandName} — ${productName}`,
+                                strainType: p.strain || '',
                                 formFactor: p.category2 || p.category1 || 'Unknown',
-                                price: p.price ? (p.price.price || p.price.minPrice || p.price) : 0,
-                                size: p.size || (p.availsize && p.availsize[0]) || '3.5g',
-                                isSale: p.badge === 'S' || p.badge === 'SALE' || p.isSale === true,
+                                category: p.category1 || '',
+                                price,
+                                ppg,
+                                size: primarySize,
+                                allSizes,
+                                totalGrams: parsed.totalGrams,
+                                isMultipack: parsed.isMultipack,
+                                units: parsed.units,
+                                thcMin, thcMax, thcMedian,
+                                cbdMin, cbdMax, cbdMedian,
+                                thc: thcMin || thcMax ? `${thcMin}-${thcMax}%` : '',
+                                cbd: cbdMin || cbdMax ? `${cbdMin}-${cbdMax}%` : '',
+                                pricePerMgTHC,
+                                stores: p.numstores || 0,
+                                isSale: p.badge === 'S' || p.badge === 'SALE' || p.badge === 'Y',
+                                badge: p.badge || 'N',
+                                imgUrl: p.imgurl || `https://hibuddy.ca/assets/pics/${p._id || ''}.jpg`,
+                                stars: p.stars || 0,
+                                starsCount: p.stars_count || 0,
                                 source: 'hibuddy.ca'
-                            }));
-                        }
+                            };
+                        });
                     }
                 } catch (e) {
                     // Ignore parse errors on other graphql queries
@@ -237,10 +329,179 @@ module.exports = async function handler(req, res) {
 
         await browser.close();
 
-        return res.status(200).json({ success: true, products: products.slice(0, 10) });
+        return res.status(200).json({ success: true, products: products.slice(0, 50) });
     } catch (error) {
         if (browser) await browser.close();
         console.error("Scrape Error:", error.message);
         return res.status(500).json({ success: false, error: error.message });
     }
 };
+
+// ─── DETAIL MODE: Per-store pricing for a single product ───
+async function handleDetailMode(req, res, productId, targetSize, province) {
+    const PROVINCES = {
+        'ON': { lat: 43.6532, lon: -79.3832, name: 'Toronto', region: 'ON', locality: 'Toronto' },
+        'AB': { lat: 51.0447, lon: -114.0719, name: 'Calgary', region: 'AB', locality: 'Calgary' },
+        'BC': { lat: 49.2827, lon: -123.1207, name: 'Vancouver', region: 'BC', locality: 'Vancouver' },
+        'MB': { lat: 49.8951, lon: -97.1384, name: 'Winnipeg', region: 'MB', locality: 'Winnipeg' },
+        'SK': { lat: 52.1332, lon: -106.6700, name: 'Saskatoon', region: 'SK', locality: 'Saskatoon' },
+    };
+
+    let browser = null;
+    try {
+        const isLocal = process.platform === 'darwin' || process.platform === 'win32';
+        const executablePath = isLocal
+            ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+            : await chromium.executablePath();
+
+        browser = await puppeteer.launch({
+            args: isLocal ? puppeteer.defaultArgs() : [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+            defaultViewport: chromium.defaultViewport,
+            executablePath,
+            headless: isLocal ? true : chromium.headless,
+            ignoreHTTPSErrors: true,
+        });
+
+        const page = await browser.newPage();
+
+        // Province spoofing
+        if (province && PROVINCES[province]) {
+            try {
+                const loc = PROVINCES[province];
+                const sessRes = await fetch('https://hibuddy.ca/api/session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+                    body: JSON.stringify({
+                        location: { lat: loc.lat, lon: loc.lon, name: loc.name, region: loc.region, locality: loc.locality, activeRange: 50000, id: "" },
+                        govtStoresEnabled: true
+                    })
+                });
+                const sessData = await sessRes.json();
+                if (sessData.session_token) {
+                    await page.setCookie({ name: 'session_token', value: sessData.session_token, domain: 'hibuddy.ca', path: '/' });
+                }
+            } catch (e) { }
+        }
+
+        await page.setRequestInterception(true);
+        let itemData = null;
+        page.on('request', (request) => {
+            const type = request.resourceType();
+            if (['image', 'stylesheet', 'font', 'media'].includes(type)) request.abort();
+            else request.continue();
+        });
+        // Capture the product detail item data (has description, strain info)
+        page.on('response', async (response) => {
+            if (response.url().includes('graphql') && response.request().method() === 'POST') {
+                try {
+                    const json = await response.json();
+                    if (json.data && json.data.item && !itemData) {
+                        itemData = json.data.item;
+                    }
+                } catch (e) { }
+            }
+        });
+
+        await page.goto(`https://hibuddy.ca/product/${productId}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await new Promise(r => setTimeout(r, 3000));
+
+        // Click the target size tab if specified
+        if (targetSize) {
+            await page.evaluate((sz) => {
+                const buttons = document.querySelectorAll('button, [role="button"], a');
+                for (const btn of buttons) {
+                    const text = (btn.innerText || '').trim();
+                    if (text === sz || text.includes(sz)) {
+                        btn.click();
+                        return;
+                    }
+                }
+            }, targetSize);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+
+        // Scrape store-level pricing from the DOM
+        const storeData = await page.evaluate(() => {
+            const stores = [];
+            // Hibuddy renders store rows as <a> elements containing store name, address, distance, and price
+            document.querySelectorAll('a, div, li').forEach(el => {
+                const text = el.innerText || '';
+                const priceMatch = text.match(/\$(\d+\.\d{2})/);
+                // Filter: must have a price, "km" for distance, and be reasonably sized (not a wrapper)
+                if (priceMatch && text.includes('km') && text.length < 400 && text.length > 10) {
+                    const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+                    const distMatch = text.match(/([\d.]+)\s*km/);
+                    stores.push({
+                        name: lines[0] || 'Unknown Store',
+                        address: lines.find(l => /\d/.test(l) && (l.includes('AVE') || l.includes('ST') || l.includes('RD') || l.includes('BLVD') || l.includes('DR') || l.includes(','))) || '',
+                        distance: distMatch ? parseFloat(distMatch[1]) : null,
+                        price: parseFloat(priceMatch[1]),
+                        phone: (text.match(/\(\d{3}\)\s*\d{3}-\d{4}/) || [''])[0]
+                    });
+                }
+            });
+
+            // Deduplicate by store name + price
+            const seen = new Set();
+            return stores.filter(s => {
+                const key = `${s.name}|${s.price}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+        });
+
+        await browser.close();
+
+        if (storeData.length === 0) {
+            return res.status(404).json({ success: false, error: 'No store pricing found for this product.' });
+        }
+
+        const prices = storeData.map(s => s.price).sort((a, b) => a - b);
+        const low = prices[0];
+        const high = prices[prices.length - 1];
+        const avg = prices.reduce((s, p) => s + p, 0) / prices.length;
+        const median = prices.length % 2 === 0
+            ? (prices[prices.length / 2 - 1] + prices[prices.length / 2]) / 2
+            : prices[Math.floor(prices.length / 2)];
+
+        // Retailer tier tagging
+        const taggedStores = storeData.map(s => ({
+            ...s,
+            tier: tagRetailerTier(s.name)
+        }));
+
+        // Extract product metadata from the item GraphQL response
+        let productMeta = null;
+        if (itemData) {
+            const qual = extractQualitative(itemData.descr || '');
+            productMeta = {
+                description: itemData.descr || '',
+                strain: itemData.strain || '',
+                imgUrl: itemData.imgurl || '',
+                tag: itemData.tag || '',
+                terpenes: qual.terpenes,
+                qualityFlags: qual.qualityFlags
+            };
+        }
+
+        return res.status(200).json({
+            success: true,
+            productId,
+            storeCount: taggedStores.length,
+            searchRadius: '50km',
+            pricing: {
+                low: +low.toFixed(2),
+                high: +high.toFixed(2),
+                avg: +avg.toFixed(2),
+                median: +median.toFixed(2),
+            },
+            stores: taggedStores.slice(0, 30),
+            productMeta
+        });
+    } catch (error) {
+        if (browser) await browser.close();
+        console.error("Detail Scrape Error:", error.message);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+}
