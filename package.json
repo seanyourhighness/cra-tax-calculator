@@ -1,0 +1,25 @@
+{
+  "name": "cra-tax-app",
+  "version": "1.0.0",
+  "description": "End-to-end cannabis pricing pipeline calculator for all Canadian provinces and territories.",
+  "main": "calculator.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seanyourhighness/CRA-Tax-Calculator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/seanyourhighness/CRA-Tax-Calculator/issues"
+  },
+  "homepage": "https://github.com/seanyourhighness/CRA-Tax-Calculator#readme",
+  "dependencies": {
+    "@sparticuz/chromium": "^143.0.4",
+    "puppeteer-core": "^24.37.5"
+  }
+}

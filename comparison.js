@@ -256,6 +256,58 @@
             renderCompetitorRows();
         });
 
+        // Auto-Fill from Hibuddy
+        document.getElementById("pcAutoSearchBtn").addEventListener("click", async () => {
+            const input = document.getElementById("pcAutoSearch");
+            const btn = document.getElementById("pcAutoSearchBtn");
+            const loading = document.getElementById("pcLoadingState");
+            const termDisplay = document.getElementById("pcSearchTermDisplay");
+
+            const brand = input.value.trim();
+            if (!brand) return alert("Please enter a brand name to search (e.g. Tribal).");
+
+            // Get additional filters
+            const sizeInput = document.getElementById("pcWeight").value.trim();
+            const provinceInput = document.getElementById("pcScrapeProvince").value;
+
+            // UI State
+            btn.disabled = true;
+            loading.style.display = "flex";
+            termDisplay.textContent = brand;
+
+            try {
+                // Build dynamic URL with filters
+                let url = `/api/scrape?brand=${encodeURIComponent(brand)}&province=${encodeURIComponent(provinceInput)}`;
+                if (sizeInput) url += `&size=${encodeURIComponent(sizeInput)}`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.success && data.products && data.products.length > 0) {
+                    // Populate competitors array with top results
+                    // We only take the top 10 to fit the UI limits
+                    competitors = data.products.slice(0, 10).map(p => ({
+                        brand: p.name, // Display the product strain/name in the brand column
+                        price: p.price.toFixed(2),
+                        source: "hibuddy.ca"
+                    }));
+
+                    saveState();
+                    renderCompetitorRows();
+                    updateComparison();
+                    input.value = ""; // Clear input on success
+                } else {
+                    alert(data.error || "No products found for that brand on hibuddy.");
+                }
+            } catch (err) {
+                alert("Network error fetching from hibuddy API. Please try again.");
+                console.error("Scrape API Error:", err);
+            } finally {
+                btn.disabled = false;
+                loading.style.display = "none";
+            }
+        });
+
         // Save your product on change
         ["pcProductName", "pcCategory", "pcWeight", "pcYourPrice"].forEach(id => {
             const el = document.getElementById(id);

@@ -167,15 +167,30 @@
           <div class="pc-section-header">
             <h2>🏷️ Competitor Prices</h2>
             <div class="pc-header-actions">
-              <a href="https://hibuddy.ca" target="_blank" rel="noopener" class="pc-hibuddy-link">
-                🔍 Look up prices on hibuddy.ca →
-              </a>
-              <button id="pcAddCompetitor" class="pc-add-btn">+ Add Competitor</button>
+              <div class="pc-auto-fill-group">
+                <select id="pcScrapeProvince" class="pc-search-input" style="width: auto;">
+                  <option value="ON">Ontario</option>
+                  <option value="AB">Alberta</option>
+                  <option value="BC">British Columbia</option>
+                  <option value="MB">Manitoba</option>
+                  <option value="SK">Saskatchewan</option>
+                </select>
+                <input type="text" id="pcAutoSearch" placeholder="Auto-fill by Brand (e.g. TRIBAL)"
+                  class="pc-search-input">
+                <button id="pcAutoSearchBtn" class="pc-search-btn">Fetch Prices ⚡</button>
+              </div>
+              <button id="pcAddCompetitor" class="pc-add-btn">+ Add Row</button>
             </div>
           </div>
-          <p class="pc-hint">Enter competitor products at the same size/weight for accurate comparison. Check <a
-              href="https://hibuddy.ca" target="_blank" rel="noopener">hibuddy.ca</a> for live Ontario retail prices.
+          <p class="pc-hint">Enter competitor products at the same size/weight for accurate comparison. Or search above
+            to auto-fill top results from <a href="https://hibuddy.ca" target="_blank" rel="noopener">hibuddy.ca</a>.
           </p>
+
+          <div id="pcLoadingState" class="pc-loading-state" style="display: none;">
+            <div class="pc-spinner"></div>
+            <span>Fetching live Ontario pricing from hibuddy for <strong id="pcSearchTermDisplay"></strong>... This
+              takes ~5-10 seconds.</span>
+          </div>
 
           <div class="pc-comp-table">
             <div class="pc-comp-header">
